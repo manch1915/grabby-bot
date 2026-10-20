@@ -44,7 +44,9 @@ def _configure(req: FetchRequest) -> None:
     config.set(("extractor",), "filename", "{category}_{id|filename}_{num|filename}.{extension}")
     config.set(("extractor",), "image-range", f"1-{req.max_items}")
     config.set(("extractor",), "timeout", 30)
-    config.set(("extractor",), "retries", 3)
+    config.set(("extractor",), "retries", 2)
+    # gallery-dl waits out HTTP 429 for a minute or more by default; a job can't block that long.
+    config.set(("extractor",), "sleep-429", 10)
     config.set(("extractor",), "skip", False)
     config.set(("extractor", "instagram"), "sleep-request", [1.0, 2.0])
     config.set(("extractor", "tiktok"), "audio", True)

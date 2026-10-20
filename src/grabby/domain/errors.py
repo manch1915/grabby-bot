@@ -48,7 +48,8 @@ _RULES: tuple[tuple[ErrorKind, re.Pattern[str]], ...] = tuple(
         (
             ErrorKind.LOGIN_REQUIRED,
             r"login required|log in|sign in|cookies|requested content is not available|"
-            r"empty media response|redirect to login|authentication|confirm you.re not a bot",
+            r"empty media response|redirect to login|authentication|confirm you.re not a bot|"
+            r"available to everyone|certain audiences",
         ),
         (
             ErrorKind.NOT_FOUND,

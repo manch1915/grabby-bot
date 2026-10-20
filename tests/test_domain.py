@@ -25,6 +25,10 @@ from grabby.domain.platforms import Platform, platform_for_host
         ("[youtube] x: Sign in to confirm you’re not a bot. Use --cookies", ErrorKind.LOGIN_REQUIRED),
         ("HTTP redirect to login page (https://www.instagram.com/accounts/login/)", ErrorKind.LOGIN_REQUIRED),
         ("[vk] Access restricted", ErrorKind.PRIVATE),
+        (
+            "[Instagram] x: This content isn't available to everyone: It can't be seen by certain audiences",
+            ErrorKind.LOGIN_REQUIRED,
+        ),
         ("[youtube] abc: Private video. Sign in if you've been granted access", ErrorKind.PRIVATE),
         ("[twitter] 1: Video #1 is unavailable", ErrorKind.NOT_FOUND),
         ("HTTP Error 404: Not Found", ErrorKind.NOT_FOUND),

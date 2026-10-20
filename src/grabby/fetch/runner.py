@@ -35,11 +35,10 @@ def acquire(req: FetchRequest) -> MediaBundle:
 def _try_gallery(error: DownloadError, platform: Platform, req: FetchRequest) -> bool:
     if platform in (Platform.YOUTUBE, Platform.TIKTOK, Platform.TWITCH, Platform.VIMEO):
         return False
-    if error.kind in _GALLERY_FALLBACK:
-        return True
-    return (
-        platform is Platform.INSTAGRAM and error.kind is ErrorKind.LOGIN_REQUIRED and bool(req.cookies_file)
-    )
+    if platform is Platform.INSTAGRAM:
+        # Without a session gallery-dl only hits Instagram's login wall and rate limits.
+        return bool(req.cookies_file) and error.kind in (*_GALLERY_FALLBACK, ErrorKind.LOGIN_REQUIRED)
+    return error.kind in _GALLERY_FALLBACK
 
 
 def _gallery(req: FetchRequest, first_error: DownloadError) -> MediaBundle:
