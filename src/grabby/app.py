@@ -119,6 +119,8 @@ async def run(settings: Settings) -> None:
         return result.added
 
     async def no_links(chat_id: int, lang: str, reply_to: int) -> None:
+        if chat_id < 0:
+            return  # in groups, stay quiet about ordinary chatter
         await bot.send_message(
             chat_id, t(lang, "no_links"), reply_parameters=ReplyParameters(message_id=reply_to)
         )
