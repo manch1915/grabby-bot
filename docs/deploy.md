@@ -63,7 +63,9 @@ Instagram stories, private posts and some YouTube videos need a logged-in sessio
 docker compose cp instagram.txt bot:/data/cookies/instagram.txt
 ```
 
-File names match platform names: `instagram.txt`, `tiktok.txt`, `youtube.txt`, `x.txt`, `reddit.txt` and so on. Use a separate account, not your personal one.
+File names start with the platform name: `instagram.txt`, `tiktok.txt`, `youtube.txt`, `x.txt`, `reddit.txt` and so on. Several files for one site (`instagram.txt`, `instagram-2.txt`, ...) are used in turn, which spreads the load over several accounts. Use separate accounts, not your personal one.
+
+Instagram hands many public Reels only to logged-in clients: anonymously its API answers with an empty media list or "isn't available to everyone", from any IP. The bot reports those as needing a login. With a cookies file they download normally. `PLATFORM_INTERVALS=instagram=2` keeps at least two seconds between Instagram jobs so a burst of 100 links doesn't look like scraping.
 
 For proxies set `PROXY_URLS` (comma separated, rotated per request) and `PROXY_PLATFORMS`.
 

@@ -92,6 +92,7 @@ async def run(settings: Settings) -> None:
         max_parallel=settings.max_parallel,
         per_user=settings.max_parallel_per_user,
         platform_limit=settings.platform_limit,
+        platform_interval=settings.platform_interval,
         can_start=workdir.has_room,
     )
     users, jobs, stats = UserStore(redis), JobStore(redis), StatsStore(redis)

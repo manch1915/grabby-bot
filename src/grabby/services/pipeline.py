@@ -5,6 +5,7 @@ import itertools
 import logging
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Protocol
 
 from grabby.config import Settings
@@ -101,6 +102,7 @@ class Pipeline:
         self._submit_locks: dict[int, asyncio.Lock] = {}
         self._workers: list[asyncio.Task[None]] = []
         self._background: set[asyncio.Task[None]] = set()
+        self._cookie_turns: dict[Platform, int] = {}
         self._proxies = itertools.cycle(settings.proxy_urls) if settings.proxy_urls else None
 
     # lifecycle
@@ -297,7 +299,7 @@ class Pipeline:
         proxy = None
         if self._proxies is not None and job.platform in self.settings.proxy_platforms:
             proxy = next(self._proxies)
-        cookies = self.settings.cookies_for(job.platform)
+        cookies = self._next_cookies(job.platform)
         return FetchRequest(
             url=job.url,
             platform=job.platform.value,
@@ -310,6 +312,14 @@ class Pipeline:
             proxy=proxy,
             split_parts=job.split_parts,
         )
+
+    def _next_cookies(self, platform: Platform) -> Path | None:
+        files = self.settings.cookie_files(platform)
+        if not files:
+            return None
+        turn = self._cookie_turns.get(platform, 0)
+        self._cookie_turns[platform] = turn + 1
+        return files[turn % len(files)]
 
     async def _complete(self, job: Job, outcome: Outcome, *, status: JobStatus) -> None:
         runtime = self._runtimes.get(job.batch_id)

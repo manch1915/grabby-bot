@@ -82,3 +82,21 @@ async def test_push_front_for_restored_jobs() -> None:
     await s.push([job(1, 5)])
     await s.push([job(1, 1), job(1, 2)], front=True)
     assert [(await s.next()).index for _ in range(3)] == [1, 2, 5]
+
+
+async def test_site_interval_spaces_out_job_starts() -> None:
+    now = {"t": 100.0}
+    s = scheduler(
+        platform_interval=lambda p: 2.0 if p is Platform.INSTAGRAM else 0.0,
+        clock=lambda: now["t"],
+        recheck_interval=0.01,
+    )
+    await s.push([job(1, 0, Platform.INSTAGRAM), job(1, 1, Platform.INSTAGRAM), job(1, 2, Platform.X)])
+    first = await s.next()
+    second = await s.next()
+    assert (first.platform, second.platform) == (Platform.INSTAGRAM, Platform.X)
+    waiter = asyncio.create_task(s.next())
+    await asyncio.sleep(0.05)
+    assert not waiter.done()
+    now["t"] += 2.1
+    assert (await asyncio.wait_for(waiter, 1)).index == 1

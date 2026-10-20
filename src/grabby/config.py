@@ -28,6 +28,10 @@ class Settings(BaseSettings):
         default_factory=lambda: {Platform.TIKTOK: 2, Platform.INSTAGRAM: 2, Platform.YOUTUBE: 2}
     )
     default_platform_limit: int = 3
+    # Seconds between job starts per site. Instagram flags accounts that fetch in bursts.
+    platform_intervals: Annotated[dict[Platform, float], NoDecode] = Field(
+        default_factory=lambda: {Platform.INSTAGRAM: 2.0}
+    )
     download_timeout_s: int = 900
     max_items_per_link: int = 20
     max_retries: int = 2
@@ -70,12 +74,12 @@ class Settings(BaseSettings):
             return [v.strip() for v in value.split(",") if v.strip()]
         return value
 
-    @field_validator("platform_limits", mode="before")
+    @field_validator("platform_limits", "platform_intervals", mode="before")
     @classmethod
-    def _limits(cls, value: object) -> object:
+    def _per_platform(cls, value: object) -> object:
         if isinstance(value, str):
             pairs = (item.split("=", 1) for item in value.split(",") if "=" in item)
-            return {Platform(k.strip()): int(v) for k, v in pairs}
+            return {Platform(k.strip()): float(v) for k, v in pairs}
         return value
 
     @property
@@ -94,6 +98,11 @@ class Settings(BaseSettings):
     def platform_limit(self, platform: Platform) -> int:
         return self.platform_limits.get(platform, self.default_platform_limit)
 
-    def cookies_for(self, platform: Platform) -> Path | None:
-        path = self.cookies_dir / f"{platform.value}.txt"
-        return path if path.is_file() else None
+    def platform_interval(self, platform: Platform) -> float:
+        return self.platform_intervals.get(platform, 0.0)
+
+    def cookie_files(self, platform: Platform) -> list[Path]:
+        """instagram.txt, instagram-2.txt, ... Several accounts share the load."""
+        if not self.cookies_dir.is_dir():
+            return []
+        return sorted(p for p in self.cookies_dir.glob(f"{platform.value}*.txt") if p.is_file())

@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import time
 from collections import OrderedDict, deque
 from collections.abc import Callable
 
@@ -20,13 +21,19 @@ class FairScheduler:
         per_user: int,
         platform_limit: Callable[[Platform], int],
         can_start: Callable[[], bool] = lambda: True,
+        platform_interval: Callable[[Platform], float] = lambda p: 0.0,
         recheck_interval: float = 5.0,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._max = max_parallel
         self._per_user = per_user
         self._platform_limit = platform_limit
         self._can_start = can_start
         self._recheck = recheck_interval
+        self._platform_interval = platform_interval
+        self._clock = clock
+        # Earliest moment the next job of a site may start, to keep request bursts down.
+        self._next_start: dict[Platform, float] = {}
         self._queues: OrderedDict[int, deque[Job]] = OrderedDict()
         self._running: dict[str, Job] = {}
         self._by_user: dict[int, int] = {}
@@ -64,10 +71,12 @@ class FairScheduler:
                     self._running[job.id] = job
                     self._by_user[job.user_id] = self._by_user.get(job.user_id, 0) + 1
                     self._by_platform[job.platform] = self._by_platform.get(job.platform, 0) + 1
+                    if interval := self._platform_interval(job.platform):
+                        self._next_start[job.platform] = self._clock() + interval
                     return job
-                # Disk space frees up without anyone notifying us, so poll as well.
+                # Disk space frees up and spacing delays run out without anyone notifying us.
                 with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(self._cond.wait(), timeout=self._recheck)
+                    await asyncio.wait_for(self._cond.wait(), timeout=self._wait_time())
 
     async def release(self, job: Job) -> None:
         async with self._cond:
@@ -77,6 +86,16 @@ class FairScheduler:
             self._by_platform[job.platform] -= 1
             self._cond.notify_all()
 
+    def _wait_time(self) -> float:
+        now = self._clock()
+        pending = [t - now for t in self._next_start.values() if t > now]
+        return max(0.05, min([self._recheck, *pending]))
+
+    def _ready(self, platform: Platform) -> bool:
+        if self._by_platform.get(platform, 0) >= self._platform_limit(platform):
+            return False
+        return self._next_start.get(platform, 0.0) <= self._clock()
+
     def _pick(self) -> Job | None:
         if len(self._running) >= self._max or not self._queues or not self._can_start():
             return None
@@ -85,7 +104,7 @@ class FairScheduler:
             if self._by_user.get(user_id, 0) >= self._per_user:
                 continue
             for i, job in enumerate(list(queue)[:_LOOKAHEAD]):
-                if self._by_platform.get(job.platform, 0) < self._platform_limit(job.platform):
+                if self._ready(job.platform):
                     del queue[i]
                     # Round robin: the user who just got a slot goes to the back.
                     self._queues.move_to_end(user_id)

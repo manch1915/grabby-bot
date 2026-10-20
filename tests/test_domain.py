@@ -1,5 +1,8 @@
+from pathlib import Path
+
 import pytest
 
+from grabby.config import Settings
 from grabby.domain.captions import CAPTION_LIMIT, build_caption
 from grabby.domain.errors import ErrorKind, classify
 from grabby.domain.jobs import Job, UserSettings
@@ -151,3 +154,14 @@ def test_settings_from_partial_dict() -> None:
 )
 def test_platform_for_host(host: str, platform: Platform) -> None:
     assert platform_for_host(host) is platform
+
+
+def test_cookie_files_rotate_per_platform(tmp_path: Path) -> None:
+    cookies = tmp_path / "cookies"
+    cookies.mkdir()
+    for name in ("instagram.txt", "instagram-2.txt", "tiktok.txt"):
+        (cookies / name).write_text("# Netscape HTTP Cookie File\n")
+    settings = Settings(bot_token="1:x", data_dir=tmp_path, platform_intervals="instagram=3")  # type: ignore[arg-type]
+    assert [p.name for p in settings.cookie_files(Platform.INSTAGRAM)] == ["instagram-2.txt", "instagram.txt"]
+    assert settings.cookie_files(Platform.YOUTUBE) == []
+    assert settings.platform_interval(Platform.INSTAGRAM) == 3.0
