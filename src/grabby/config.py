@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     min_free_disk_mb: int = 1024
     data_dir: Path = Path("/data")
 
-    max_parallel: int = 4
+    max_parallel: int = 3
     max_parallel_per_user: int = 2
     platform_limits: Annotated[dict[Platform, int], NoDecode] = Field(
         default_factory=lambda: {Platform.TIKTOK: 2, Platform.INSTAGRAM: 2, Platform.YOUTUBE: 2}

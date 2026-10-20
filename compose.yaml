@@ -27,11 +27,11 @@ services:
         condition: service_healthy
       bot-api:
         condition: service_started
-    deploy:
-      resources:
-        limits:
-          cpus: "1.5"
-          memory: 1g
+    # Download subprocesses share this budget. Swap on the host is nearly full, so a job that
+    # runs out of memory gets killed and reported instead of dragging the server into swap.
+    mem_limit: 680m
+    memswap_limit: 680m
+    cpus: 1.5
     logging: *logging
 
   bot-api:
@@ -45,18 +45,16 @@ services:
       - bot-api:/var/lib/telegram-bot-api
       # Files are sent as file:///work/..., so the server must see the same path.
       - work:/work:ro
-    deploy:
-      resources:
-        limits:
-          cpus: "0.75"
-          memory: 512m
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.75
     logging: *logging
 
   redis:
     image: redis:8-alpine
     restart: unless-stopped
     command: >
-      redis-server --appendonly yes --maxmemory 100mb --maxmemory-policy volatile-lru
+      redis-server --appendonly yes --maxmemory 64mb --maxmemory-policy volatile-lru
     volumes:
       - redis:/data
     healthcheck:
@@ -64,11 +62,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 160m
+    mem_limit: 96m
+    memswap_limit: 96m
+    cpus: 0.25
     logging: *logging
 
 volumes:

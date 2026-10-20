@@ -22,7 +22,7 @@ The bot uses long polling, so it needs no domain, TLS or reverse proxy. Everythi
    ```ini
    WORK_DIR_LIMIT_MB=4096   # downloads in progress never take more than this
    MIN_FREE_DISK_MB=3072    # new downloads wait while the disk is below this
-   MAX_PARALLEL=4
+   MAX_PARALLEL=3           # each download subprocess takes 100-150 MB
    ```
 
 2. From your machine:
@@ -41,11 +41,11 @@ On first start the bot calls `logOut` on api.telegram.org once (Telegram require
 
 | Service | CPU | Memory |
 |---|---|---|
-| bot (with download subprocesses) | 1.5 | 1 GB |
-| bot-api | 0.75 | 512 MB |
-| redis | 0.25 | 160 MB |
+| bot (with download subprocesses) | 1.5 | 680 MB |
+| bot-api | 0.75 | 256 MB |
+| redis | 0.25 | 96 MB (64 MB data) |
 
-Logs rotate at 3 × 10 MB per container. Videos are never re-encoded except for short clips in codecs Telegram can't play, and that runs on a single thread.
+The whole stack stays around 1 GB of RAM. Swap is capped at the same values, so a download that runs out of memory is killed and reported as a failed link instead of pushing the host into swap. Logs rotate at 3 × 10 MB per container. Videos are never re-encoded except for short clips in codecs Telegram can't play, and that runs on a single thread.
 
 ## Cookies and proxies
 
