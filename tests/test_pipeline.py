@@ -1,8 +1,10 @@
 import asyncio
+from pathlib import Path
 
 from conftest import Env
 from grabby.domain.errors import ErrorKind
 from grabby.domain.jobs import JobStatus
+from grabby.fetch.protocol import FetchRequest, FetchResult
 from grabby.services.pipeline import JobOptions
 
 TT = "https://www.tiktok.com/@a/video/{}"
@@ -178,3 +180,23 @@ async def test_repeats_across_messages_are_counted_once(env: Env) -> None:
     batch, _ = env.messenger.finished[0]
     assert (second.added, second.duplicates, as_file) == (1, 1, 1)
     assert (batch.total, batch.duplicates) == (4, 1)
+
+
+async def test_each_job_gets_its_own_cookie_copy(env: Env) -> None:
+    cookies = env.settings.cookies_dir
+    cookies.mkdir(parents=True)
+    (cookies / "tiktok.txt").write_text("# Netscape HTTP Cookie File\n")
+    seen: list[str | None] = []
+    original = env.fetcher.fetch
+
+    async def spy(key: str, request: FetchRequest, *, extractor_path: Path | None = None) -> FetchResult:
+        seen.append(request.cookies_file)
+        assert request.cookies_file and Path(request.cookies_file).read_text().startswith("#")  # noqa: ASYNC240
+        return await original(key, request, extractor_path=extractor_path)
+
+    env.fetcher.fetch = spy  # type: ignore[method-assign]
+    await env.pipeline.start()
+    await submit(env, TT.format(1), TT.format(2))
+    await wait_done(env)
+    assert len(seen) == 2 and len(set(seen)) == 2
+    assert all(path and Path(path).parent.name != "cookies" for path in seen)

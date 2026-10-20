@@ -54,7 +54,9 @@ _RULES: tuple[tuple[ErrorKind, re.Pattern[str]], ...] = tuple(
         (
             ErrorKind.NOT_FOUND,
             r"\b404\b|not found|removed|deleted|no longer available|does not exist|unavailable|"
-            r"has been taken down|status 10204|post may have been|video not available",
+            r"has been taken down|status 10204|post may have been|video not available|"
+            # Instagram answers 400 on the media info call for posts that are gone.
+            r"info extraction failed: http error 400|400 bad request' for '\S+/media/\d+/info",
         ),
         (ErrorKind.NO_MEDIA, r"no video|no media|there is no|nothing to download|no formats"),
         (ErrorKind.UNSUPPORTED, r"unsupported url|no suitable extractor|not supported"),

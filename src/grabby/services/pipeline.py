@@ -3,6 +3,7 @@
 import asyncio
 import itertools
 import logging
+import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -299,11 +300,18 @@ class Pipeline:
         proxy = None
         if self._proxies is not None and job.platform in self.settings.proxy_platforms:
             proxy = next(self._proxies)
+        workdir = self.workdir.job_dir(job.id)
         cookies = self._next_cookies(job.platform)
+        if cookies is not None:
+            # yt-dlp writes the jar back on exit; parallel jobs must not share one file.
+            private = workdir / "cookies.txt"
+            shutil.copyfile(cookies, private)
+            private.chmod(0o600)
+            cookies = private
         return FetchRequest(
             url=job.url,
             platform=job.platform.value,
-            workdir=str(self.workdir.job_dir(job.id)),
+            workdir=str(workdir),
             quality=job.quality,
             as_document=job.as_document,
             max_items=self.settings.max_items_per_link,
