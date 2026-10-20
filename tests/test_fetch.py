@@ -11,7 +11,7 @@ from grabby.domain.media import MediaBundle, MediaItem, MediaKind, PostInfo, Qua
 from grabby.domain.platforms import Platform
 from grabby.fetch import postprocess
 from grabby.fetch.protocol import FetchRequest, FetchResult
-from grabby.fetch.ytdlp_backend import post_info
+from grabby.fetch.ytdlp_backend import FILE_FORMAT, _format, post_info
 
 needs_ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
 
@@ -142,8 +142,6 @@ def test_post_info(platform: Platform, info: dict[str, str], author: str, text: 
 
 
 def test_instagram_prefers_progressive_h264_over_vp9_dash() -> None:
-    from grabby.fetch.ytdlp_backend import FILE_FORMAT, _format
-
     video = FetchRequest(url="u", platform="instagram", workdir="/w")
     original = FetchRequest(url="u", platform="instagram", workdir="/w", as_document=True)
     assert "b[format_id!*=dash]" in _format(video, Platform.INSTAGRAM)
