@@ -19,6 +19,7 @@ from grabby.bot.texts import t
 from grabby.config import Settings
 from grabby.infra.store import CacheStore, JobStore, KeyValue, StatsStore, UserStore
 from grabby.services.fetcher import Fetcher
+from grabby.services.netguard import PublicOnlyResolver
 from grabby.services.pipeline import JobOptions, Pipeline
 from grabby.services.resolver import LinkResolver
 from grabby.services.scheduler import FairScheduler
@@ -97,7 +98,7 @@ async def run(settings: Settings) -> None:
     footer = settings.footer_text or f'<a href="https://t.me/{me.username}">@{me.username}</a>'
     messenger = TelegramMessenger(bot, users, local_files=local_files, footer=footer)
 
-    http = aiohttp.ClientSession()
+    http = aiohttp.ClientSession(connector=aiohttp.TCPConnector(resolver=PublicOnlyResolver()))
     pipeline = Pipeline(
         settings=settings,
         scheduler=scheduler,

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import socket
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -19,9 +20,10 @@ from aiohttp import web
 
 from grabby.bot import telegram_calls
 from grabby.bot.intake import Intake, extract_urls
+from grabby.fetch import sandbox
 from grabby.fetch.threads import find_post, media_urls
 from grabby.services import resolver as resolver_module
-from grabby.services.netguard import blocked_literal, is_public_host
+from grabby.services.netguard import PublicOnlyResolver, blocked_literal, is_public_host
 from grabby.services.pipeline import JobOptions
 from grabby.services.resolver import LinkResolver
 from grabby.services.storage import WorkDir
@@ -220,3 +222,22 @@ def test_blocked_literal(host: str, blocked: bool) -> None:
 async def test_is_public_host_rejects_names_resolving_inside() -> None:
     assert not await is_public_host("localhost")
     assert not await is_public_host("127.0.0.1")
+
+
+def test_fetch_sandbox_blocks_private_addresses() -> None:
+    original = socket.socket.connect, socket.socket.connect_ex
+    try:
+        sandbox.install(allow=["10.0.0.9"])
+        with socket.socket() as sock, pytest.raises(ConnectionRefusedError):
+            sock.connect(("127.0.0.1", 6379))
+        assert sandbox._allowed(("10.0.0.9", 3128), frozenset({"10.0.0.9"}))
+        assert sandbox._allowed(("8.8.8.8", 443), frozenset())
+        assert not sandbox._allowed(("169.254.169.254", 80), frozenset())
+    finally:
+        socket.socket.connect, socket.socket.connect_ex = original
+
+
+async def test_public_only_resolver() -> None:
+    resolver = PublicOnlyResolver()
+    with pytest.raises(OSError):
+        await resolver.resolve("localhost", 80)

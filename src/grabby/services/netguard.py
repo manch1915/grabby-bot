@@ -7,6 +7,10 @@ private ranges, the Docker gateway or cloud metadata addresses.
 import asyncio
 import ipaddress
 import socket
+from typing import Any
+
+from aiohttp.abc import ResolveResult
+from aiohttp.resolver import ThreadedResolver
 
 
 def blocked_literal(host: str) -> bool:
@@ -29,3 +33,16 @@ async def is_public_host(host: str) -> bool:
         return False
     addresses = {info[4][0] for info in infos}
     return bool(addresses) and all(ipaddress.ip_address(str(a).split("%")[0]).is_global for a in addresses)
+
+
+class PublicOnlyResolver(ThreadedResolver):
+    """aiohttp resolver that refuses names pointing inside. The connection goes to the very
+    addresses checked here, so DNS rebinding between check and connect doesn't help."""
+
+    async def resolve(self, host: str, port: int = 0, family: Any = socket.AF_INET) -> list[ResolveResult]:
+        if blocked_literal(host):
+            raise OSError(f"{host} is not a public host")
+        results: list[ResolveResult] = await super().resolve(host, port, family)
+        if not results or not all(ipaddress.ip_address(r["host"].split("%")[0]).is_global for r in results):
+            raise OSError(f"{host} resolves to a non-public address")
+        return results
