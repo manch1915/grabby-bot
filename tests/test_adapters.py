@@ -227,10 +227,12 @@ async def test_is_public_host_rejects_names_resolving_inside() -> None:
 def test_fetch_sandbox_blocks_private_addresses() -> None:
     original = socket.socket.connect, socket.socket.connect_ex
     try:
-        sandbox.install(allow=["10.0.0.9"])
+        sandbox.install(allow=[("10.0.0.9", 3128)])
         with socket.socket() as sock, pytest.raises(ConnectionRefusedError):
             sock.connect(("127.0.0.1", 6379))
-        assert sandbox._allowed(("10.0.0.9", 3128), frozenset({"10.0.0.9"}))
+        assert sandbox._allowed(("10.0.0.9", 3128), frozenset({("10.0.0.9", 3128)}))
+        assert not sandbox._allowed(("10.0.0.9", 22), frozenset({("10.0.0.9", 3128)}))
+        assert sandbox.proxy_endpoints("http://10.0.0.9:3128") == [("10.0.0.9", 3128)]
         assert sandbox._allowed(("8.8.8.8", 443), frozenset())
         assert not sandbox._allowed(("169.254.169.254", 80), frozenset())
     finally:

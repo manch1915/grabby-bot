@@ -15,11 +15,11 @@ _original_connect = socket.socket.connect
 _original_connect_ex = socket.socket.connect_ex
 
 
-def _allowed(address: Any, exceptions: frozenset[str]) -> bool:
+def _allowed(address: Any, exceptions: frozenset[tuple[str, int]]) -> bool:
     if not isinstance(address, tuple) or not address:
         return True  # unix sockets and the like
     host = str(address[0]).split("%")[0]
-    if host in exceptions:
+    if len(address) > 1 and (host, int(address[1])) in exceptions:
         return True
     try:
         return ipaddress.ip_address(host).is_global
@@ -27,7 +27,7 @@ def _allowed(address: Any, exceptions: frozenset[str]) -> bool:
         return False
 
 
-def install(allow: Iterable[str] = ()) -> None:
+def install(allow: Iterable[tuple[str, int]] = ()) -> None:
     """Refuse connections to loopback, private, link-local and reserved addresses."""
     exceptions = frozenset(allow)
 
@@ -45,14 +45,20 @@ def install(allow: Iterable[str] = ()) -> None:
     socket.socket.connect_ex = connect_ex  # type: ignore[method-assign, assignment]
 
 
-def proxy_hosts(proxy: str | None) -> list[str]:
-    """The configured proxy may live on a private address; resolve it so it stays reachable."""
+_DEFAULT_PORTS = {"http": 80, "https": 443, "socks5": 1080, "socks5h": 1080, "socks4": 1080}
+
+
+def proxy_endpoints(proxy: str | None) -> list[tuple[str, int]]:
+    """The configured proxy may sit on a private address. Only its exact ip:port is let
+    through; everything else on that host stays blocked."""
     if not proxy:
         return []
-    host = urlsplit(proxy).hostname
-    if not host:
+    parts = urlsplit(proxy)
+    port = parts.port or _DEFAULT_PORTS.get(parts.scheme, 1080)
+    if not parts.hostname:
         return []
     try:
-        return sorted({str(info[4][0]) for info in socket.getaddrinfo(host, None)})
+        infos = socket.getaddrinfo(parts.hostname, port)
     except OSError:
         return []
+    return sorted({(str(info[4][0]), port) for info in infos})
