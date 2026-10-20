@@ -1,0 +1,61 @@
+[project]
+name = "grabby"
+version = "0.1.0"
+description = "Telegram bot that downloads videos and photos from TikTok, Instagram, YouTube and other sites in batches"
+requires-python = ">=3.13"
+dependencies = [
+    "aiogram>=3.31",
+    "gallery-dl>=1.32.17",
+    "pydantic-settings>=2.16",
+    "redis>=8.1",
+    "yt-dlp[curl-cffi,default,deno]>=2026.8.19",
+]
+
+[dependency-groups]
+dev = [
+    "fakeredis>=2.40",
+    "mypy>=2.4",
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+    "ruff>=0.17",
+]
+
+[project.scripts]
+grabby = "grabby.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/grabby"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "BLE", "A", "C4", "SIM", "RET", "PTH", "ASYNC", "RUF", "PL"]
+ignore = ["PLR0911", "PLR0912", "PLR0913", "PLR0917", "PLR2004", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["PLR2004", "S101"]
+# Composition root: wiring reads better as one function.
+"src/grabby/app.py" = ["PLR0915"]
+# The fetch entry point imports extractors lazily so a broken update still reports back.
+"src/grabby/fetch/__main__.py" = ["PLC0415"]
+
+[tool.mypy]
+strict = true
+python_version = "3.13"
+mypy_path = "src"
+packages = ["grabby"]
+
+[[tool.mypy.overrides]]
+module = ["yt_dlp.*", "gallery_dl.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
