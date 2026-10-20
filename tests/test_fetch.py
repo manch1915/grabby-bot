@@ -139,3 +139,13 @@ def test_post_info(platform: Platform, info: dict[str, str], author: str, text: 
     result = post_info(info, "https://u", platform)
     assert result.author == author
     assert result.text == text
+
+
+def test_instagram_prefers_progressive_h264_over_vp9_dash() -> None:
+    from grabby.fetch.ytdlp_backend import FILE_FORMAT, _format
+
+    video = FetchRequest(url="u", platform="instagram", workdir="/w")
+    original = FetchRequest(url="u", platform="instagram", workdir="/w", as_document=True)
+    assert "b[format_id!*=dash]" in _format(video, Platform.INSTAGRAM)
+    assert _format(original, Platform.INSTAGRAM) == FILE_FORMAT
+    assert "format_id" not in _format(video, Platform.TIKTOK)

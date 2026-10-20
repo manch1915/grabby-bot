@@ -20,7 +20,11 @@ BROWSER_UA = (
     "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
 )
 _PLAYABLE = "[vcodec~='^(avc|h264|hevc|hvc1|hev1|h265)']"
-VIDEO_FORMAT = f"bv*{_PLAYABLE}+ba[acodec~='^(mp4a|aac)']/bv*{_PLAYABLE}+ba/b{_PLAYABLE}/bv*+ba/b"
+_PLAYABLE_FIRST = f"bv*{_PLAYABLE}+ba[acodec~='^(mp4a|aac)']/bv*{_PLAYABLE}+ba/b{_PLAYABLE}"
+VIDEO_FORMAT = f"{_PLAYABLE_FIRST}/bv*+ba/b"
+# Instagram serves DASH reels as VP9 only, while the progressive MP4s (no codec info in
+# the metadata) are H.264 with sound. Those play inline; the VP9 original is for "send as file".
+INSTAGRAM_VIDEO_FORMAT = f"{_PLAYABLE_FIRST}/b[format_id!*=dash]/bv*+ba/b"
 FILE_FORMAT = "bv*+ba/b"
 SOCIAL = frozenset(
     {
@@ -67,6 +71,12 @@ class Downloaded:
     audio_only: bool = False
 
 
+def _format(req: FetchRequest, platform: Platform) -> str:
+    if req.as_document:
+        return FILE_FORMAT
+    return INSTAGRAM_VIDEO_FORMAT if platform is Platform.INSTAGRAM else VIDEO_FORMAT
+
+
 def build_options(req: FetchRequest, platform: Platform, logger: _Logger) -> dict[str, Any]:
     sort = ["res", "vcodec:h264", "acodec:aac", "ext:mp4:m4a"]
     if req.quality is Quality.ECONOMY:
@@ -79,7 +89,7 @@ def build_options(req: FetchRequest, platform: Platform, logger: _Logger) -> dic
         "paths": {"home": req.workdir, "temp": req.workdir},
         "outtmpl": "%(id).60s.%(playlist_index|0)s.%(ext)s",
         "restrictfilenames": True,
-        "format": FILE_FORMAT if req.as_document else VIDEO_FORMAT,
+        "format": _format(req, platform),
         "format_sort": sort,
         "merge_output_format": "mp4/mkv" if req.as_document else "mp4",
         "noplaylist": True,

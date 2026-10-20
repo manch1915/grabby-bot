@@ -2,6 +2,9 @@ import json
 import math
 import os
 import subprocess
+import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -107,14 +110,33 @@ def remux(src: Path) -> Path:
     return dst
 
 
+@contextmanager
+def _one_at_a_time(lock_dir: Path) -> Iterator[None]:
+    """Parallel 1080p encodes don't fit the container's memory, so they queue up."""
+    if sys.platform == "win32":
+        yield
+        return
+    import fcntl  # noqa: PLC0415 - Unix only
+
+    with (lock_dir / ".transcode.lock").open("w") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def transcode(src: Path) -> Path:
-    # Only short clips get here; one thread keeps the shared server responsive.
+    # Only short clips get here. One thread and a short lookahead keep CPU and memory low
+    # on the shared server.
     dst = src.with_name(src.stem + ".h264.mp4")
-    _ffmpeg(
-        *_input(src), "-map", "0:v:0", "-map", "0:a:0?",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
-        "-threads", "1", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(dst),
-    )  # fmt: skip
+    with _one_at_a_time(src.parent.parent):
+        _ffmpeg(
+            "-threads", "1", *_input(src), "-map", "0:v:0", "-map", "0:a:0?",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+            "-x264-params", "rc-lookahead=10:ref=2", "-threads", "1",
+            "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(dst),
+        )  # fmt: skip
     src.unlink(missing_ok=True)
     return dst
 
