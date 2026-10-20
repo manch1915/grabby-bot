@@ -141,7 +141,11 @@ async def run(settings: Settings) -> None:
 
     for lang, commands in _COMMANDS.items():
         await bot.set_my_commands(commands, language_code=lang)
+        await bot.set_my_description(t(lang, "description"), language_code=lang)
+        await bot.set_my_short_description(t(lang, "short_description"), language_code=lang)
     await bot.set_my_commands(_COMMANDS["en"])
+    await bot.set_my_description(t("en", "description"))
+    await bot.set_my_short_description(t("en", "short_description"))
 
     async def sweep() -> None:
         workdir.sweep(older_than_s=3600, keep=pipeline.active_job_ids())

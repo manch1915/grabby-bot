@@ -14,6 +14,11 @@ _TEXTS: dict[str, dict[str, str]] = {
             "/settings  качество, формат, подписи, язык\n"
             "/cancel  остановить очередь"
         ),
+        "description": (
+            "Скачиваю видео и фото из TikTok без водяного знака, Instagram, YouTube, X, Pinterest, "
+            "Reddit, VK, Threads и других сайтов. Можно присылать сразу много ссылок, файлы до 2 ГБ."
+        ),
+        "short_description": "Видео из TikTok, Instagram, YouTube и других сайтов. Пачками, до 2 ГБ.",
         "no_links": "Не нашёл ссылок. Пришлите ссылку на видео или пост.",
         "txt_too_big": "Файл со ссылками слишком большой, нужен .txt до 1 МБ.",
         "closed": "Бот сейчас работает только для своих. Если вам нужен доступ, напишите владельцу.",
@@ -73,6 +78,11 @@ _TEXTS: dict[str, dict[str, str]] = {
             "/settings  quality, format, captions, language\n"
             "/cancel  stop the queue"
         ),
+        "description": (
+            "I download videos and photos from TikTok (no watermark), Instagram, YouTube, X, Pinterest, "
+            "Reddit, VK, Threads and other sites. Send many links at once, files up to 2 GB."
+        ),
+        "short_description": "Videos from TikTok, Instagram, YouTube and more. In batches, up to 2 GB.",
         "no_links": "I couldn't find any links. Send me a link to a video or a post.",
         "txt_too_big": "That file is too big, I need a .txt under 1 MB.",
         "closed": "This bot is invite-only right now. Ask the owner if you need access.",
