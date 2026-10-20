@@ -66,6 +66,8 @@ class _Runtime:
     batch: Batch
     outcomes: dict[int, Outcome] = field(default_factory=dict)
     jobs: dict[str, Job] = field(default_factory=dict)
+    # Links already in the batch, keyed like the cache so "send as file" isn't a duplicate.
+    seen: set[str] = field(default_factory=set)
     cond: asyncio.Condition = field(default_factory=asyncio.Condition)
     task: asyncio.Task[None] | None = None
     last_edit: float = 0.0
@@ -150,21 +152,21 @@ class Pipeline:
             for link in resolved
             if link.platform is Platform.OTHER and not await is_public_host(link.host)
         }
-        unique: list[Link] = []
-        seen: set[str] = set()
-        duplicates = 0
-        for link in resolved:
-            if link.url in seen:
-                duplicates += 1
-                continue
-            seen.add(link.url)
-            unique.append(link)
-
         lock = self._submit_locks.setdefault(user_id, asyncio.Lock())
         async with lock:
             runtime = await self._open_runtime(user_id, chat_id, lang, reply_to)
             async with runtime.cond:
                 batch = runtime.batch
+                unique: list[Link] = []
+                duplicates = 0
+                for link in resolved:
+                    key = _dedupe_key(link.url, options)
+                    if key in runtime.seen:
+                        duplicates += 1
+                        continue
+                    runtime.seen.add(key)
+                    unique.append(link)
+                batch.duplicates += duplicates
                 new_jobs = []
                 for link in unique:
                     job = Job(
@@ -422,6 +424,7 @@ class Pipeline:
             runtime = _Runtime(batch=batch)
             requeue: list[Job] = []
             for job in await self.jobs.batch_jobs(batch.id):
+                runtime.seen.add(job.cache_key)
                 if job.index < batch.delivered:
                     continue
                 runtime.jobs[job.id] = job
@@ -437,3 +440,8 @@ class Pipeline:
             await self.jobs.save_batch(batch)
             await self.scheduler.push(requeue)
             log.info("restored batch %s: %d jobs back in the queue", batch.id, len(requeue))
+
+
+def _dedupe_key(url: str, options: JobOptions) -> str:
+    variant = f"{options.quality.value}:{'doc' if options.as_document else 'media'}"
+    return f"{variant}:{url}"

@@ -163,3 +163,18 @@ async def test_links_to_internal_addresses_are_refused(env: Env) -> None:
     assert len(failures) == 2
     assert {f.error_kind for f in failures} == {ErrorKind.UNSUPPORTED}
     assert env.fetcher.calls == []
+
+
+async def test_repeats_across_messages_are_counted_once(env: Env) -> None:
+    await env.pipeline.start()
+    env.fetcher.block.clear()
+    await submit(env, TT.format(1), TT.format(2))
+    second = await env.pipeline.submit_text(
+        user_id=1, chat_id=1, lang="ru", texts=[TT.format(2), TT.format(3)]
+    )
+    as_file = await submit(env, TT.format(1), options=JobOptions(as_document=True))
+    env.fetcher.block.set()
+    await wait_done(env)
+    batch, _ = env.messenger.finished[0]
+    assert (second.added, second.duplicates, as_file) == (1, 1, 1)
+    assert (batch.total, batch.duplicates) == (4, 1)

@@ -73,6 +73,7 @@ class Batch:
     done: int = 0
     failed: int = 0
     cancelled: int = 0
+    duplicates: int = 0
     delivered: int = 0
     status_message_id: int | None = None
     reply_to: int | None = None

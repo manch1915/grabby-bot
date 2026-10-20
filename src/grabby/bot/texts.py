@@ -26,6 +26,7 @@ _TEXTS: dict[str, dict[str, str]] = {
         "status_many": "Обрабатываю ссылки: {processed} из {total}",
         "status_failed": "Не получилось: {failed}",
         "status_queue": "В очереди: {queued}",
+        "duplicates": "Повторы пропустил: {n}",
         "summary_ok": "Готово, всё скачал: {total}.",
         "summary_partial": "Готово: {ok} из {total}.",
         "summary_cancelled": "Остановлено. Успел прислать {ok} из {total}.",
@@ -90,6 +91,7 @@ _TEXTS: dict[str, dict[str, str]] = {
         "status_many": "Working on links: {processed} of {total}",
         "status_failed": "Failed: {failed}",
         "status_queue": "Queued: {queued}",
+        "duplicates": "Skipped repeated links: {n}",
         "summary_ok": "Done, all {total} downloaded.",
         "summary_partial": "Done: {ok} of {total}.",
         "summary_cancelled": "Stopped. Sent {ok} of {total}.",
@@ -138,7 +140,7 @@ _ERRORS: dict[str, dict[ErrorKind, str]] = {
     "ru": {
         ErrorKind.NOT_FOUND: "пост удалён или недоступен",
         ErrorKind.PRIVATE: "аккаунт закрыт",
-        ErrorKind.LOGIN_REQUIRED: "сайт пускает только после входа в аккаунт",
+        ErrorKind.LOGIN_REQUIRED: "без входа в аккаунт сайт его не отдаёт, даже если пост открытый",
         ErrorKind.AGE_RESTRICTED: "стоит ограничение по возрасту",
         ErrorKind.GEO_BLOCKED: "недоступно в стране сервера",
         ErrorKind.UNSUPPORTED: "этот сайт не поддерживается",
@@ -155,7 +157,7 @@ _ERRORS: dict[str, dict[ErrorKind, str]] = {
     "en": {
         ErrorKind.NOT_FOUND: "the post was deleted or isn't available",
         ErrorKind.PRIVATE: "the account is private",
-        ErrorKind.LOGIN_REQUIRED: "the site only shows it after logging in",
+        ErrorKind.LOGIN_REQUIRED: "the site won't hand it over without a login, even for a public post",
         ErrorKind.AGE_RESTRICTED: "it's age-restricted",
         ErrorKind.GEO_BLOCKED: "it's blocked in the server's country",
         ErrorKind.UNSUPPORTED: "this site isn't supported",

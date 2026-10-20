@@ -61,6 +61,8 @@ class TelegramMessenger:
         lines = [t(batch.lang, "status_many", processed=batch.processed, total=batch.total)]
         if batch.failed:
             lines.append(t(batch.lang, "status_failed", failed=batch.failed))
+        if batch.duplicates:
+            lines.append(t(batch.lang, "duplicates", n=batch.duplicates))
         if queued:
             lines.append(t(batch.lang, "status_queue", queued=queued))
         return "\n".join(lines)
@@ -308,6 +310,8 @@ class TelegramMessenger:
         else:
             head = t(batch.lang, "summary_ok", total=batch.total)
         lines = [head]
+        if batch.duplicates:
+            lines.append(t(batch.lang, "duplicates", n=batch.duplicates) + ".")
         failed = [j for j in failures if j.status is JobStatus.FAILED]
         if failed:
             lines += ["", t(batch.lang, "summary_failed_head")]
