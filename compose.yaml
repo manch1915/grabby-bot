@@ -1,0 +1,78 @@
+name: grabby
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  bot:
+    build: .
+    image: grabby-bot:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      BOT_API_URL: http://bot-api:8081
+      REDIS_URL: redis://redis:6379/0
+      WORK_DIR: /work
+      DATA_DIR: /data
+    volumes:
+      - work:/work
+      - data:/data
+      # In --local mode getFile returns a path on the Bot API server's disk.
+      - bot-api:/var/lib/telegram-bot-api:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      bot-api:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1g
+    logging: *logging
+
+  bot-api:
+    image: aiogram/telegram-bot-api:latest
+    restart: unless-stopped
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:?set TELEGRAM_API_ID in .env}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:?set TELEGRAM_API_HASH in .env}
+      TELEGRAM_LOCAL: "1"
+    volumes:
+      - bot-api:/var/lib/telegram-bot-api
+      # Files are sent as file:///work/..., so the server must see the same path.
+      - work:/work:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 512m
+    logging: *logging
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: >
+      redis-server --appendonly yes --maxmemory 100mb --maxmemory-policy volatile-lru
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 160m
+    logging: *logging
+
+volumes:
+  work:
+  data:
+  bot-api:
+  redis:
