@@ -1,9 +1,17 @@
+from dataclasses import replace
 from pathlib import Path
 
 from grabby.domain.errors import DownloadError, ErrorKind
 from grabby.domain.media import MAX_UPLOAD_BYTES, MediaBundle, MediaItem, MediaKind, PostInfo
 from grabby.domain.platforms import Platform
-from grabby.fetch import gallery_backend, postprocess, threads, tiktok_photos, ytdlp_backend
+from grabby.fetch import (
+    gallery_backend,
+    instagram_account,
+    postprocess,
+    threads,
+    tiktok_photos,
+    ytdlp_backend,
+)
 from grabby.fetch.protocol import FetchRequest
 
 _GALLERY_FALLBACK = frozenset({ErrorKind.NO_MEDIA, ErrorKind.UNSUPPORTED, ErrorKind.UNKNOWN})
@@ -17,6 +25,30 @@ def acquire(req: FetchRequest) -> MediaBundle:
     if platform is Platform.TIKTOK and "/photo/" in req.url:
         return _tiktok_photos(req)
 
+    if platform is Platform.INSTAGRAM and req.cookies_file:
+        return _instagram_with_fallback(req)
+    return _generic(req, platform)
+
+
+def _instagram_with_fallback(req: FetchRequest) -> MediaBundle:
+    """Anonymous first: about half of public Reels need no account, and every request made
+    with a session brings that account closer to an Instagram checkpoint."""
+    try:
+        return _generic(replace(req, cookies_file=None), Platform.INSTAGRAM)
+    except DownloadError as error:
+        if error.kind not in (ErrorKind.LOGIN_REQUIRED, ErrorKind.NO_MEDIA, ErrorKind.UNKNOWN):
+            raise
+    try:
+        return _generic(req, Platform.INSTAGRAM)
+    except DownloadError as error:
+        if req.cookies_file and "400" in error.detail:
+            reason = instagram_account.blocked_reason(req.cookies_file, req.url, req.proxy)
+            if reason:
+                raise DownloadError(ErrorKind.ACCOUNT_BLOCKED, reason) from error
+        raise
+
+
+def _generic(req: FetchRequest, platform: Platform) -> MediaBundle:
     try:
         result = ytdlp_backend.fetch(req, platform, images_from_thumbnails=platform is Platform.INSTAGRAM)
     except DownloadError as error:

@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from grabby.domain.errors import ErrorKind
+from grabby.domain.errors import DownloadError, ErrorKind
 from grabby.domain.media import MediaBundle, MediaItem, MediaKind, PostInfo, Quality
 from grabby.domain.platforms import Platform
-from grabby.fetch import postprocess
+from grabby.fetch import instagram_account, postprocess, runner
 from grabby.fetch.protocol import FetchRequest, FetchResult
 from grabby.fetch.ytdlp_backend import FILE_FORMAT, _format, post_info
 
@@ -147,3 +147,39 @@ def test_instagram_prefers_progressive_h264_over_vp9_dash() -> None:
     assert "b[format_id!*=dash]" in _format(video, Platform.INSTAGRAM)
     assert _format(original, Platform.INSTAGRAM) == FILE_FORMAT
     assert "format_id" not in _format(video, Platform.TIKTOK)
+
+
+def test_instagram_media_id_from_shortcode() -> None:
+    assert instagram_account.media_id("DZelBdysX47") == 3917731554288303675
+
+
+def test_instagram_tries_anonymously_before_using_the_account(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str | None] = []
+    bundle = MediaBundle(info=PostInfo(url="u"))
+
+    def fake_generic(req: FetchRequest, platform: Platform) -> MediaBundle:
+        calls.append(req.cookies_file)
+        return bundle
+
+    monkeypatch.setattr(runner, "_generic", fake_generic)
+    req = FetchRequest(
+        url="https://www.instagram.com/reel/abc/", platform="instagram", workdir="/w", cookies_file="c.txt"
+    )
+    assert runner.acquire(req) is bundle
+    assert calls == [None]
+
+
+def test_instagram_checkpoint_is_reported_as_blocked_account(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_generic(req: FetchRequest, platform: Platform) -> MediaBundle:
+        if req.cookies_file is None:
+            raise DownloadError(ErrorKind.LOGIN_REQUIRED, "empty media response")
+        raise DownloadError(ErrorKind.UNKNOWN, "Video info extraction failed: HTTP Error 400: Bad Request")
+
+    monkeypatch.setattr(runner, "_generic", fake_generic)
+    monkeypatch.setattr(instagram_account, "blocked_reason", lambda *a: "checkpoint_required /challenge/")
+    req = FetchRequest(
+        url="https://www.instagram.com/reel/abc/", platform="instagram", workdir="/w", cookies_file="c.txt"
+    )
+    with pytest.raises(DownloadError) as caught:
+        runner.acquire(req)
+    assert caught.value.kind is ErrorKind.ACCOUNT_BLOCKED

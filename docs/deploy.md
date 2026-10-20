@@ -67,6 +67,8 @@ File names start with the platform name: `instagram.txt`, `tiktok.txt`, `youtube
 
 Instagram hands many public Reels only to logged-in clients: anonymously its API answers with an empty media list or "isn't available to everyone", from any IP. The bot reports those as needing a login. With a cookies file they download normally. `PLATFORM_INTERVALS=instagram=2` keeps at least two seconds between Instagram jobs so a burst of 100 links doesn't look like scraping.
 
+Accounts are only used when the anonymous request fails, so they see about half the traffic. New accounts used from a datacenter IP still get flagged fast: two fresh accounts hit `checkpoint_required` after roughly a hundred requests within a few minutes. Instagram then answers HTTP 400 to everything; the bot asks Instagram for the reason, renames the file to `*.blocked`, moves on to the next account and messages the admins. Older accounts and a residential proxy for Instagram (`PROXY_URLS`, `PROXY_PLATFORMS=instagram`) last much longer.
+
 For proxies set `PROXY_URLS` (comma separated, rotated per request) and `PROXY_PLATFORMS`.
 
 ## Updates of yt-dlp and gallery-dl

@@ -35,11 +35,8 @@ from grabby.domain.platforms import Platform, platform_for_host
         ("[youtube] abc: Private video. Sign in if you've been granted access", ErrorKind.PRIVATE),
         ("[twitter] 1: Video #1 is unavailable", ErrorKind.NOT_FOUND),
         ("HTTP Error 404: Not Found", ErrorKind.NOT_FOUND),
-        ("[Instagram] DXw: Video info extraction failed: HTTP Error 400: Bad Request", ErrorKind.NOT_FOUND),
-        (
-            "HttpError: '400 Bad Request' for 'https://www.instagram.com/api/v1/media/3886757589599404997/info/'",
-            ErrorKind.NOT_FOUND,
-        ),
+        # With a session, 400 can mean a blocked account; the runner asks Instagram which one it is.
+        ("[Instagram] DXw: Video info extraction failed: HTTP Error 400: Bad Request", ErrorKind.UNKNOWN),
         ("[TikTok] 7666: Video not available, status code 10231", ErrorKind.NOT_FOUND),
         ("HTTP Error 429: Too Many Requests", ErrorKind.RATE_LIMITED),
         ("Unsupported URL: https://example.org/", ErrorKind.UNSUPPORTED),

@@ -4,6 +4,7 @@ from pathlib import Path
 from conftest import Env
 from grabby.domain.errors import ErrorKind
 from grabby.domain.jobs import JobStatus
+from grabby.domain.platforms import Platform
 from grabby.fetch.protocol import FetchRequest, FetchResult
 from grabby.services.pipeline import JobOptions
 
@@ -200,3 +201,29 @@ async def test_each_job_gets_its_own_cookie_copy(env: Env) -> None:
     await wait_done(env)
     assert len(seen) == 2 and len(set(seen)) == 2
     assert all(path and Path(path).parent.name != "cookies" for path in seen)
+
+
+async def test_blocked_account_is_retired_and_the_next_one_used(env: Env) -> None:
+    cookies = env.settings.cookies_dir
+    cookies.mkdir(parents=True)
+    for name in ("tiktok.txt", "tiktok-2.txt"):
+        (cookies / name).write_text("# Netscape HTTP Cookie File\n")
+    url = TT.format(5)
+    env.fetcher.errors = {url: ErrorKind.ACCOUNT_BLOCKED}
+    original = env.fetcher.fetch
+
+    async def heal_after_first(
+        key: str, request: FetchRequest, *, extractor_path: Path | None = None
+    ) -> FetchResult:
+        result = await original(key, request, extractor_path=extractor_path)
+        env.fetcher.errors.clear()
+        return result
+
+    env.fetcher.fetch = heal_after_first  # type: ignore[method-assign]
+    await env.pipeline.start()
+    await submit(env, url)
+    await wait_done(env)
+    assert env.messenger.delivered[0][2]
+    assert len(list(cookies.glob("*.blocked"))) == 1
+    assert len(env.settings.cookie_files(Platform.TIKTOK)) == 1
+    assert "осталось аккаунтов: 1" in env.messenger.alerts[0]

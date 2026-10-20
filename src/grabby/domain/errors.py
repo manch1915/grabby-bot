@@ -6,6 +6,7 @@ class ErrorKind(StrEnum):
     NOT_FOUND = "not_found"
     PRIVATE = "private"
     LOGIN_REQUIRED = "login_required"
+    ACCOUNT_BLOCKED = "account_blocked"
     AGE_RESTRICTED = "age_restricted"
     GEO_BLOCKED = "geo_blocked"
     UNSUPPORTED = "unsupported"
@@ -54,9 +55,7 @@ _RULES: tuple[tuple[ErrorKind, re.Pattern[str]], ...] = tuple(
         (
             ErrorKind.NOT_FOUND,
             r"\b404\b|not found|removed|deleted|no longer available|does not exist|unavailable|"
-            r"has been taken down|status 10204|post may have been|video not available|"
-            # Instagram answers 400 on the media info call for posts that are gone.
-            r"info extraction failed: http error 400|400 bad request' for '\S+/media/\d+/info",
+            r"has been taken down|status 10204|post may have been|video not available",
         ),
         (ErrorKind.NO_MEDIA, r"no video|no media|there is no|nothing to download|no formats"),
         (ErrorKind.UNSUPPORTED, r"unsupported url|no suitable extractor|not supported"),

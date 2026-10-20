@@ -44,12 +44,14 @@ class TelegramMessenger:
         local_files: bool,
         footer: str,
         max_bytes: int,
+        admin_ids: list[int] | None = None,
         upload_slots: int = 3,
     ) -> None:
         self.bot = bot
         self.users = users
         self.local_files = local_files
         self.max_bytes = max_bytes
+        self.admin_ids = admin_ids or []
         self.footer = footer
         self._uploads = asyncio.Semaphore(upload_slots)
 
@@ -292,6 +294,11 @@ class TelegramMessenger:
             text = t(batch.lang, "too_large", limit=limit) + "\n" + escape(job.url)
         await self._edit(batch, text, markup)
         batch.status_message_id = None  # keep the error, finish() must not delete it
+
+    async def notify_admins(self, text: str) -> None:
+        for admin_id in self.admin_ids:
+            with contextlib.suppress(Exception):
+                await call(lambda admin_id=admin_id: self.bot.send_message(admin_id, escape(text)))  # type: ignore[misc]
 
     # summary
 

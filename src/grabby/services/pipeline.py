@@ -48,6 +48,8 @@ class Messenger(Protocol):
 
     async def finish(self, batch: Batch, failures: list[Job]) -> None: ...
 
+    async def notify_admins(self, text: str) -> None: ...
+
 
 @dataclass(slots=True)
 class Submitted:
@@ -104,6 +106,7 @@ class Pipeline:
         self._workers: list[asyncio.Task[None]] = []
         self._background: set[asyncio.Task[None]] = set()
         self._cookie_turns: dict[Platform, int] = {}
+        self._job_cookies: dict[str, Path] = {}
         self._proxies = itertools.cycle(settings.proxy_urls) if settings.proxy_urls else None
 
     # lifecycle
@@ -286,6 +289,8 @@ class Pipeline:
                 return
             kind = result.error_kind or ErrorKind.UNKNOWN
             self.workdir.release(job.id)
+            if kind is ErrorKind.ACCOUNT_BLOCKED and await self._retire_cookies(job, result.error):
+                continue  # another account is left, try it
             if kind.retryable and job.attempts <= self.settings.max_retries:
                 delay = self.settings.retry_base_delay_s * 2 ** (job.attempts - 1)
                 log.info("retrying %s in %ss after %s", job.url, delay, kind)
@@ -302,7 +307,9 @@ class Pipeline:
             proxy = next(self._proxies)
         workdir = self.workdir.job_dir(job.id)
         cookies = self._next_cookies(job.platform)
+        self._job_cookies.pop(job.id, None)
         if cookies is not None:
+            self._job_cookies[job.id] = cookies
             # yt-dlp writes the jar back on exit; parallel jobs must not share one file.
             private = workdir / "cookies.txt"
             shutil.copyfile(cookies, private)
@@ -320,6 +327,22 @@ class Pipeline:
             proxy=proxy,
             split_parts=job.split_parts,
         )
+
+    async def _retire_cookies(self, job: Job, reason: str) -> bool:
+        """Take a blocked account out of rotation. True if the site still has others."""
+        source = self._job_cookies.pop(job.id, None)
+        if source is not None and source.exists():
+            source.rename(source.with_suffix(".blocked"))
+            left = len(self.settings.cookie_files(job.platform))
+            log.warning("cookies %s blocked by %s: %s", source.name, job.platform.value, reason)
+            try:
+                await self.messenger.notify_admins(
+                    f"{job.platform.label} заблокировал аккаунт из {source.name}: {reason}. "
+                    f"Файл отключён, осталось аккаунтов: {left}."
+                )
+            except Exception:
+                log.exception("could not notify admins")
+        return bool(self.settings.cookie_files(job.platform))
 
     def _next_cookies(self, platform: Platform) -> Path | None:
         files = self.settings.cookie_files(platform)

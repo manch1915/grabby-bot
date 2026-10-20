@@ -98,7 +98,12 @@ async def run(settings: Settings) -> None:
     users, jobs, stats = UserStore(redis), JobStore(redis), StatsStore(redis)
     footer = settings.footer_text or f'<a href="https://t.me/{me.username}">@{me.username}</a>'
     messenger = TelegramMessenger(
-        bot, users, local_files=local_files, footer=footer, max_bytes=settings.max_upload_bytes
+        bot,
+        users,
+        local_files=local_files,
+        footer=footer,
+        max_bytes=settings.max_upload_bytes,
+        admin_ids=settings.admin_ids,
     )
 
     http = aiohttp.ClientSession(connector=aiohttp.TCPConnector(resolver=PublicOnlyResolver()))

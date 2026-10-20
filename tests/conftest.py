@@ -60,6 +60,7 @@ class FakeMessenger:
     delivered: list[tuple[int, str, bool, bool]] = field(default_factory=list)  # index, url, ok, cached
     finished: list[tuple[Batch, list[Job]]] = field(default_factory=list)
     statuses: int = 0
+    alerts: list[str] = field(default_factory=list)
     done: asyncio.Event = field(default_factory=asyncio.Event)
 
     async def status_new(self, batch: Batch) -> int | None:
@@ -76,6 +77,9 @@ class FakeMessenger:
     async def finish(self, batch: Batch, failures: list[Job]) -> None:
         self.finished.append((batch, failures))
         self.done.set()
+
+    async def notify_admins(self, text: str) -> None:
+        self.alerts.append(text)
 
 
 @dataclass
