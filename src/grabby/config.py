@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     def extractors_dir(self) -> Path:
         return self.data_dir / "extractors"
 
+    @property
+    def max_upload_bytes(self) -> int:
+        # api.telegram.org takes 50 MB from bots; a local server in --local mode takes 2000 MB.
+        return (2000 if self.bot_api_url and self.bot_api_local else 50) * 1024 * 1024
+
     def platform_limit(self, platform: Platform) -> int:
         return self.platform_limits.get(platform, self.default_platform_limit)
 

@@ -10,15 +10,15 @@ _TEXTS: dict[str, dict[str, str]] = {
             "<b>Откуда</b>: TikTok (видео и слайдшоу), Instagram (Reels, посты, карусели), YouTube и Shorts, "
             "X, Facebook, Pinterest, Reddit, VK, Threads, Twitch, Vimeo и сотни других сайтов.\n\n"
             "<b>Сколько угодно</b>: несколько ссылок в одном сообщении, пачка пересланных постов или "
-            ".txt-файл со списком. Пришлю всё по порядку, файлы до 2 ГБ.\n\n"
+            ".txt-файл со списком. Пришлю всё по порядку, файлы до {limit}.\n\n"
             "/settings  качество, формат, подписи, язык\n"
             "/cancel  остановить очередь"
         ),
         "description": (
             "Скачиваю видео и фото из TikTok без водяного знака, Instagram, YouTube, X, Pinterest, "
-            "Reddit, VK, Threads и других сайтов. Можно присылать сразу много ссылок, файлы до 2 ГБ."
+            "Reddit, VK, Threads и других сайтов. Можно присылать сразу много ссылок, файлы до {limit}."
         ),
-        "short_description": "Видео из TikTok, Instagram, YouTube и других сайтов. Пачками, до 2 ГБ.",
+        "short_description": "Видео из TikTok, Instagram, YouTube и других сайтов. Пачками, до {limit}.",
         "no_links": "Не нашёл ссылок. Пришлите ссылку на видео или пост.",
         "txt_too_big": "Файл со ссылками слишком большой, нужен .txt до 1 МБ.",
         "closed": "Бот сейчас работает только для своих. Если вам нужен доступ, напишите владельцу.",
@@ -41,7 +41,7 @@ _TEXTS: dict[str, dict[str, str]] = {
         "btn_cancel": "Остановить",
         "btn_economy": "Скачать в 720p",
         "btn_split": "Прислать частями",
-        "too_large": "Файл больше 2 ГБ, Telegram такой не примет. Скачать в 720p или прислать частями?",
+        "too_large": "Файл больше {limit}, Telegram такой не примет. Скачать в 720p или прислать частями?",
         "settings_title": "<b>Настройки</b>\nНажмите на пункт, чтобы переключить.",
         "set_quality_max": "Качество: максимум",
         "set_quality_economy": "Качество: экономия (до 720p)",
@@ -74,15 +74,15 @@ _TEXTS: dict[str, dict[str, str]] = {
             "YouTube and Shorts, X, Facebook, Pinterest, Reddit, VK, Threads, Twitch, Vimeo and hundreds "
             "of other sites.\n\n"
             "<b>As many as you like</b>: several links in one message, a stack of forwarded posts or a "
-            ".txt file with a list. Everything comes back in order, files up to 2 GB.\n\n"
+            ".txt file with a list. Everything comes back in order, files up to {limit}.\n\n"
             "/settings  quality, format, captions, language\n"
             "/cancel  stop the queue"
         ),
         "description": (
             "I download videos and photos from TikTok (no watermark), Instagram, YouTube, X, Pinterest, "
-            "Reddit, VK, Threads and other sites. Send many links at once, files up to 2 GB."
+            "Reddit, VK, Threads and other sites. Send many links at once, files up to {limit}."
         ),
-        "short_description": "Videos from TikTok, Instagram, YouTube and more. In batches, up to 2 GB.",
+        "short_description": "Videos from TikTok, Instagram, YouTube and more. In batches, up to {limit}.",
         "no_links": "I couldn't find any links. Send me a link to a video or a post.",
         "txt_too_big": "That file is too big, I need a .txt under 1 MB.",
         "closed": "This bot is invite-only right now. Ask the owner if you need access.",
@@ -106,7 +106,7 @@ _TEXTS: dict[str, dict[str, str]] = {
         "btn_economy": "Get 720p",
         "btn_split": "Send in parts",
         "too_large": (
-            "The file is over 2 GB and Telegram won't take it. Get 720p instead or send it in parts?"
+            "The file is over {limit} and Telegram won't take it. Get 720p instead or send it in parts?"
         ),
         "settings_title": "<b>Settings</b>\nTap an option to switch it.",
         "set_quality_max": "Quality: maximum",
@@ -144,7 +144,7 @@ _ERRORS: dict[str, dict[ErrorKind, str]] = {
         ErrorKind.UNSUPPORTED: "этот сайт не поддерживается",
         ErrorKind.NOT_A_POST: "это профиль или плейлист, нужна ссылка на конкретный пост",
         ErrorKind.NO_MEDIA: "в посте нет видео или фото",
-        ErrorKind.TOO_LARGE: "файл больше 2 ГБ",
+        ErrorKind.TOO_LARGE: "файл больше {limit}",
         ErrorKind.RATE_LIMITED: "сайт временно ограничил загрузки, попробуйте позже",
         ErrorKind.NETWORK: "сайт не ответил",
         ErrorKind.TIMEOUT: "загрузка шла слишком долго",
@@ -161,7 +161,7 @@ _ERRORS: dict[str, dict[ErrorKind, str]] = {
         ErrorKind.UNSUPPORTED: "this site isn't supported",
         ErrorKind.NOT_A_POST: "that's a profile or a playlist, I need a link to a single post",
         ErrorKind.NO_MEDIA: "there's no video or photo in the post",
-        ErrorKind.TOO_LARGE: "the file is over 2 GB",
+        ErrorKind.TOO_LARGE: "the file is over {limit}",
         ErrorKind.RATE_LIMITED: "the site is limiting downloads right now, try later",
         ErrorKind.NETWORK: "the site didn't respond",
         ErrorKind.TIMEOUT: "the download took too long",
@@ -184,6 +184,13 @@ def t(lang: str, key: str, **kwargs: object) -> str:
     return text.format(**kwargs) if kwargs else text
 
 
-def error_text(lang: str, kind: ErrorKind | None) -> str:
+def error_text(lang: str, kind: ErrorKind | None, *, limit: str = "") -> str:
     table = _ERRORS.get(lang, _ERRORS["en"])
-    return table[kind or ErrorKind.UNKNOWN]
+    return table[kind or ErrorKind.UNKNOWN].format(limit=limit)
+
+
+def size_label(lang: str, size: int) -> str:
+    mb = size / 1024 / 1024
+    if mb >= 1000:
+        return f"{mb / 1000:.0f} ГБ" if lang == "ru" else f"{mb / 1000:.0f} GB"
+    return f"{mb:.0f} МБ" if lang == "ru" else f"{mb:.0f} MB"

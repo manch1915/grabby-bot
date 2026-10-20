@@ -20,7 +20,7 @@ from aiogram.types import (
 
 from grabby.bot import keyboards
 from grabby.bot.telegram_calls import call
-from grabby.bot.texts import error_text, t
+from grabby.bot.texts import error_text, size_label, t
 from grabby.domain.captions import build_caption
 from grabby.domain.errors import ErrorKind
 from grabby.domain.jobs import Batch, Job, JobStatus, UserSettings
@@ -37,11 +37,19 @@ type InputMedia = InputMediaPhoto | InputMediaVideo | InputMediaDocument
 
 class TelegramMessenger:
     def __init__(
-        self, bot: Bot, users: UserStore, *, local_files: bool, footer: str, upload_slots: int = 3
+        self,
+        bot: Bot,
+        users: UserStore,
+        *,
+        local_files: bool,
+        footer: str,
+        max_bytes: int,
+        upload_slots: int = 3,
     ) -> None:
         self.bot = bot
         self.users = users
         self.local_files = local_files
+        self.max_bytes = max_bytes
         self.footer = footer
         self._uploads = asyncio.Semaphore(upload_slots)
 
@@ -274,11 +282,12 @@ class TelegramMessenger:
                 await call(lambda: self.bot.send_document(chat, file_id, caption=caption))
 
     async def _single_error(self, batch: Batch, job: Job) -> None:
-        reason = error_text(batch.lang, job.error_kind)
+        limit = size_label(batch.lang, self.max_bytes)
+        reason = error_text(batch.lang, job.error_kind, limit=limit)
         text = t(batch.lang, "error_one", reason=reason, url=escape(job.url))
         markup = keyboards.too_large(batch.lang, job.id) if job.error_kind is ErrorKind.TOO_LARGE else None
         if job.error_kind is ErrorKind.TOO_LARGE:
-            text = t(batch.lang, "too_large") + "\n" + escape(job.url)
+            text = t(batch.lang, "too_large", limit=limit) + "\n" + escape(job.url)
         await self._edit(batch, text, markup)
         batch.status_message_id = None  # keep the error, finish() must not delete it
 
@@ -303,7 +312,7 @@ class TelegramMessenger:
         if failed:
             lines += ["", t(batch.lang, "summary_failed_head")]
             for job in failed[:_SUMMARY_LINES]:
-                reason = error_text(batch.lang, job.error_kind)
+                reason = error_text(batch.lang, job.error_kind, limit=size_label(batch.lang, self.max_bytes))
                 lines.append(f"{job.index + 1}. {escape(_short(job.url))}  {reason}")
             if len(failed) > _SUMMARY_LINES:
                 lines.append(t(batch.lang, "summary_more", n=len(failed) - _SUMMARY_LINES))

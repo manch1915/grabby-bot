@@ -14,7 +14,7 @@ docker build -t grabby-bot:latest .
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 docker save grabby-bot:latest | gzip -1 > "$stage/image.tar.gz"
-cp compose.yaml "$stage/"
+cp compose.yaml deploy/enable-local-api.sh "$stage/"
 
 # fail2ban on the server bans bursts of SSH connections, so everything goes through one.
 tar -C "$stage" -cf - . | ssh "$HOST" "set -e

@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery, Message
 from grabby.bot import keyboards
 from grabby.bot.intake import Intake, extract_urls
 from grabby.bot.keyboards import BatchAction, JobAction, SettingToggle
-from grabby.bot.texts import LANGS, t
+from grabby.bot.texts import LANGS, size_label, t
 from grabby.domain.jobs import SendMode, UserSettings
 from grabby.domain.media import Quality
 from grabby.infra.store import UserStore
@@ -18,8 +18,8 @@ MAX_TXT_BYTES = 1024 * 1024
 
 @router.message(CommandStart())
 @router.message(Command("help"))
-async def start(message: Message, prefs: UserSettings) -> None:
-    await message.answer(t(prefs.lang, "start"))
+async def start(message: Message, prefs: UserSettings, upload_limit: int) -> None:
+    await message.answer(t(prefs.lang, "start", limit=size_label(prefs.lang, upload_limit)))
 
 
 @router.message(Command("settings"))

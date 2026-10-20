@@ -1,11 +1,11 @@
 # Deploying Grabby
 
-The bot uses long polling, so it needs no domain, TLS or reverse proxy. Everything runs as one compose project: the bot, a local `telegram-bot-api` server and Redis.
+The bot uses long polling, so it needs no domain, TLS or reverse proxy. Everything runs as one compose project: the bot, Redis and, optionally, a local `telegram-bot-api` server.
 
 ## What you need
 
 - A bot token from [@BotFather](https://t.me/BotFather). Use a bot that nothing else polls: two processes on one token fight over updates.
-- `api_id` and `api_hash` from <https://my.telegram.org>. The local Bot API server needs them; they are what lifts the upload limit from 50 MB to 2 GB.
+- Optional: `api_id` and `api_hash` from <https://my.telegram.org>. The local Bot API server needs them, and it is what lifts the upload limit from 50 MB to 2 GB. Without them the bot works through api.telegram.org and offers a lower quality or parts for anything over 50 MB.
 - A Linux host with Docker Compose v2. The image is about 850 MB on disk (static ffmpeg and Deno for YouTube make up most of it).
 
 ## First deploy
@@ -33,7 +33,15 @@ The bot uses long polling, so it needs no domain, TLS or reverse proxy. Everythi
 
    The script builds the image locally, streams it with `compose.yaml` over a single SSH connection, loads it and runs `docker compose up -d --no-build`. Nothing is compiled on the server.
 
-On first start the bot calls `logOut` on api.telegram.org once (Telegram requires this before a bot can move to a local server) and remembers it in Redis.
+## Switching to the local Bot API server
+
+Once `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` are in `/opt/grabby/.env`:
+
+```bash
+cd /opt/grabby && bash enable-local-api.sh
+```
+
+The script sets `COMPOSE_PROFILES=local-api` and `BOT_API_URL=http://bot-api:8081`, then runs `docker compose up -d`, which starts the `bot-api` container and restarts the bot. On its first start against the local server the bot calls `logOut` on api.telegram.org, as Telegram requires before a bot moves to a local server, and remembers that in Redis. After `logOut` the cloud API refuses the bot for about 10 minutes, so switching back is not instant. To go back: clear both variables in `.env` and run `docker compose up -d --remove-orphans`.
 
 ## Resource limits
 

@@ -13,7 +13,9 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      BOT_API_URL: http://bot-api:8081
+      # Empty: api.telegram.org with its 50 MB cap. deploy/enable-local-api.sh switches it
+      # to the bundled server together with COMPOSE_PROFILES=local-api.
+      BOT_API_URL: ${BOT_API_URL:-}
       REDIS_URL: redis://redis:6379/0
       WORK_DIR: /work
       DATA_DIR: /data
@@ -27,6 +29,7 @@ services:
         condition: service_healthy
       bot-api:
         condition: service_started
+        required: false
     # Download subprocesses share this budget. Swap on the host is nearly full, so a job that
     # runs out of memory gets killed and reported instead of dragging the server into swap.
     mem_limit: 680m
@@ -36,10 +39,11 @@ services:
 
   bot-api:
     image: aiogram/telegram-bot-api:latest
+    profiles: [local-api]
     restart: unless-stopped
     environment:
-      TELEGRAM_API_ID: ${TELEGRAM_API_ID:?set TELEGRAM_API_ID in .env}
-      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:?set TELEGRAM_API_HASH in .env}
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
       TELEGRAM_LOCAL: "1"
     volumes:
       - bot-api:/var/lib/telegram-bot-api

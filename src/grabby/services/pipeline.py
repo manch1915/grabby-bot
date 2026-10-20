@@ -303,6 +303,7 @@ class Pipeline:
             quality=job.quality,
             as_document=job.as_document,
             max_items=self.settings.max_items_per_link,
+            max_bytes=self.settings.max_upload_bytes,
             cookies_file=str(cookies) if cookies else None,
             proxy=proxy,
             split_parts=job.split_parts,

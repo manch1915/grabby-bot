@@ -15,7 +15,7 @@ from grabby.bot.handlers import admin, user
 from grabby.bot.intake import Intake
 from grabby.bot.messenger import TelegramMessenger
 from grabby.bot.middlewares import AccessMiddleware
-from grabby.bot.texts import t
+from grabby.bot.texts import size_label, t
 from grabby.config import Settings
 from grabby.infra.store import CacheStore, JobStore, KeyValue, StatsStore, UserStore
 from grabby.services.fetcher import Fetcher
@@ -96,7 +96,9 @@ async def run(settings: Settings) -> None:
     )
     users, jobs, stats = UserStore(redis), JobStore(redis), StatsStore(redis)
     footer = settings.footer_text or f'<a href="https://t.me/{me.username}">@{me.username}</a>'
-    messenger = TelegramMessenger(bot, users, local_files=local_files, footer=footer)
+    messenger = TelegramMessenger(
+        bot, users, local_files=local_files, footer=footer, max_bytes=settings.max_upload_bytes
+    )
 
     http = aiohttp.ClientSession(connector=aiohttp.TCPConnector(resolver=PublicOnlyResolver()))
     pipeline = Pipeline(
@@ -133,6 +135,7 @@ async def run(settings: Settings) -> None:
     dp.include_routers(admin.router, user.router)
     dp["pipeline"] = pipeline
     dp["users"] = users
+    dp["upload_limit"] = settings.max_upload_bytes
     dp["intake"] = Intake(submit, no_links)
     dp["admin"] = admin.AdminContext(
         settings=settings, stats=stats, users=users, pipeline=pipeline, workdir=workdir, kv=kv,
@@ -141,11 +144,13 @@ async def run(settings: Settings) -> None:
 
     for lang, commands in _COMMANDS.items():
         await bot.set_my_commands(commands, language_code=lang)
-        await bot.set_my_description(t(lang, "description"), language_code=lang)
-        await bot.set_my_short_description(t(lang, "short_description"), language_code=lang)
+        limit = size_label(lang, settings.max_upload_bytes)
+        await bot.set_my_description(t(lang, "description", limit=limit), language_code=lang)
+        await bot.set_my_short_description(t(lang, "short_description", limit=limit), language_code=lang)
     await bot.set_my_commands(_COMMANDS["en"])
-    await bot.set_my_description(t("en", "description"))
-    await bot.set_my_short_description(t("en", "short_description"))
+    limit = size_label("en", settings.max_upload_bytes)
+    await bot.set_my_description(t("en", "description", limit=limit))
+    await bot.set_my_short_description(t("en", "short_description", limit=limit))
 
     async def sweep() -> None:
         workdir.sweep(older_than_s=3600, keep=pipeline.active_job_ids())

@@ -1,6 +1,6 @@
 # Grabby
 
-A Telegram bot that downloads videos and photos from TikTok, Instagram, YouTube and hundreds of other sites. Send it one link or a hundred: it queues them, shows progress in a single status message and sends everything back in the original order, in the best quality the site offers.
+[@grabby_soc_bot](https://t.me/grabby_soc_bot) is a Telegram bot that downloads videos and photos from TikTok, Instagram, YouTube and hundreds of other sites. Send it one link or a hundred: it queues them, shows progress in a single status message and sends everything back in the original order, in the best quality the site offers.
 
 <!-- screenshots -->
 
@@ -14,7 +14,7 @@ Sources:
 
 Batches can be several links in one message, a stack of forwarded posts (links in the text, captions and buttons all count) or a `.txt` file with a list. Duplicates are dropped and results arrive in the order the links were sent.
 
-Files go up to 2 GB because the bot talks to a local Telegram Bot API server instead of the public one with its 50 MB cap. For anything bigger the bot offers a 720p version or the same video cut into parts.
+With the bundled local Telegram Bot API server files go up to 2 GB; the public api.telegram.org caps bots at 50 MB. Either way, for anything over the limit the bot offers a 720p version or the same video cut into parts.
 
 The best video and audio streams are merged without re-encoding. When two formats have the same resolution, H.264/AAC is preferred because every Telegram client plays it inline. Videos are sent with `supports_streaming`, real dimensions, duration and a thumbnail, and each one has a "Send as file" button for the untouched original.
 
@@ -71,15 +71,15 @@ The bot is public, so every link is untrusted input. Links to private, loopback 
 
 ## Running it
 
-You need a bot token from [@BotFather](https://t.me/BotFather) and `api_id` / `api_hash` from [my.telegram.org](https://my.telegram.org) for the local Bot API server.
+You need a bot token from [@BotFather](https://t.me/BotFather). For 2 GB uploads you also need `api_id` / `api_hash` from [my.telegram.org](https://my.telegram.org) for the local Bot API server.
 
 ```bash
-cp .env.example .env    # fill BOT_TOKEN, ADMIN_IDS, TELEGRAM_API_ID, TELEGRAM_API_HASH
+cp .env.example .env    # fill BOT_TOKEN and ADMIN_IDS
 docker compose up -d --build
 docker compose logs -f bot
 ```
 
-That starts three containers: the bot, the Bot API server and Redis, each with CPU and memory limits.
+That starts the bot and Redis against api.telegram.org. With `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `COMPOSE_PROFILES=local-api` and `BOT_API_URL=http://bot-api:8081` in `.env`, the same command also starts the local Bot API server. Every container has CPU and memory limits; the whole stack fits in about 1 GB of RAM.
 
 For development without Docker:
 

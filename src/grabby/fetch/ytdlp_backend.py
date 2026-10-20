@@ -37,10 +37,12 @@ class _Logger:
         self.messages: list[str] = []
 
     def debug(self, msg: str) -> None:
-        pass
+        # The size cap is reported as a plain screen message, not as an error.
+        if "max-filesize" in msg:
+            self.messages.append(msg)
 
     def info(self, msg: str) -> None:
-        pass
+        self.debug(msg)
 
     def warning(self, msg: str) -> None:
         self.messages.append(msg)
@@ -89,6 +91,9 @@ def build_options(req: FetchRequest, platform: Platform, logger: _Logger) -> dic
         "concurrent_fragment_downloads": 4,
         "overwrites": True,
     }
+    if not req.split_parts:
+        # Don't pull a 3 GB file only to learn Telegram won't take it.
+        opts["max_filesize"] = req.max_bytes
     if req.cookies_file:
         opts["cookiefile"] = req.cookies_file
     if req.proxy:
