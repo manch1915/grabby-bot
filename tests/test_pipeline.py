@@ -153,3 +153,13 @@ async def test_users_do_not_share_batches(env: Env) -> None:
     second = await env.pipeline.submit_text(user_id=2, chat_id=2, lang="en", texts=[TT.format(1)])
     assert first.batch is not None and second.batch is not None
     assert first.batch.id != second.batch.id
+
+
+async def test_links_to_internal_addresses_are_refused(env: Env) -> None:
+    await env.pipeline.start()
+    await submit(env, "http://127.0.0.1:8081/bot123/getMe", "https://192.168.1.1/admin.mp4")
+    await wait_done(env)
+    _, failures = env.messenger.finished[0]
+    assert len(failures) == 2
+    assert {f.error_kind for f in failures} == {ErrorKind.UNSUPPORTED}
+    assert env.fetcher.calls == []

@@ -12,6 +12,22 @@ from grabby.fetch.protocol import RESULT_MARKER, FetchRequest, FetchResult
 
 log = logging.getLogger(__name__)
 
+_ENV_ALLOWED = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "LANG",
+        "TZ",
+        "TMPDIR",
+        "PYTHONPATH",
+        "FFMPEG_BIN",
+        "FFPROBE_BIN",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+    }
+)
+
 
 class Fetcher:
     """Runs each download in its own `python -m grabby.fetch` process.
@@ -27,7 +43,9 @@ class Fetcher:
         self._cancelled: set[str] = set()
 
     def _env(self, extractor_path: Path | None) -> dict[str, str]:
-        env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
+        # The child handles untrusted content, so it gets no tokens or other secrets.
+        env = {k: v for k, v in os.environ.items() if k in _ENV_ALLOWED or k.startswith("LC_")}
+        env.update(PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
         paths = [str(extractor_path)] if extractor_path else []
         if existing := env.get("PYTHONPATH"):
             paths.append(existing)

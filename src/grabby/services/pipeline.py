@@ -12,9 +12,11 @@ from grabby.domain.errors import ErrorKind
 from grabby.domain.jobs import Batch, Job, JobStatus
 from grabby.domain.links import Link, check_supported, find_urls, normalize
 from grabby.domain.media import MediaBundle, Quality
+from grabby.domain.platforms import Platform
 from grabby.fetch.protocol import FetchRequest
 from grabby.infra.store import CachedFile, CachedPost, CacheStore, JobStore, StatsStore
 from grabby.services.fetcher import Fetcher
+from grabby.services.netguard import is_public_host
 from grabby.services.resolver import LinkResolver
 from grabby.services.scheduler import FairScheduler
 from grabby.services.storage import WorkDir
@@ -143,6 +145,11 @@ class Pipeline:
             return Submitted(batch=None)
         options = options or JobOptions()
         resolved = await self.resolver.resolve_all(links)
+        internal = {
+            link.url
+            for link in resolved
+            if link.platform is Platform.OTHER and not await is_public_host(link.host)
+        }
         unique: list[Link] = []
         seen: set[str] = set()
         duplicates = 0
@@ -166,7 +173,12 @@ class Pipeline:
                         as_document=options.as_document, split_parts=options.split_parts,
                     )  # fmt: skip
                     batch.total += 1
-                    if (reason := check_supported(link)) is not None:
+                    if link.url in internal:
+                        job.status = JobStatus.FAILED
+                        job.error_kind, job.error = ErrorKind.UNSUPPORTED, "not a public host"
+                        batch.failed += 1
+                        runtime.outcomes[job.index] = Outcome(job)
+                    elif (reason := check_supported(link)) is not None:
                         job.status = JobStatus.FAILED
                         job.error_kind, job.error = ErrorKind.NOT_A_POST, reason.value
                         batch.failed += 1

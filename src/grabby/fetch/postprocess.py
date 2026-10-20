@@ -21,6 +21,17 @@ FFPROBE = os.environ.get("FFPROBE_BIN", "ffprobe")
 VIDEO_EXTS = frozenset({"mp4", "m4v", "mov", "webm", "mkv", "flv", "avi", "ts", "3gp"})
 AUDIO_EXTS = frozenset({"mp3", "m4a", "aac", "ogg", "opus", "wav", "flac"})
 IMAGE_EXTS = frozenset({"jpg", "jpeg", "png", "webp", "heic", "heif", "avif", "bmp", "gif"})
+# Downloaded files come from strangers. A "video" that is really an HLS or concat
+# playlist could make ffmpeg read local files, so only plain media demuxers may open it.
+_DEMUXERS = (
+    "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,mp3,flac,ogg,wav,aac,flv,mpegts,avi,gif,"
+    "image2,jpeg_pipe,png_pipe,webp_pipe,bmp_pipe"
+)
+SAFE_INPUT = ("-protocol_whitelist", "file", "-format_whitelist", _DEMUXERS)
+
+
+def _input(path: Path) -> list[str]:
+    return [*SAFE_INPUT, "-i", str(path)]
 
 
 @dataclass(slots=True)
@@ -35,7 +46,17 @@ class Probe:
 
 def probe(path: Path) -> Probe:
     out = subprocess.run(
-        [FFPROBE, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)],
+        [
+            FFPROBE,
+            "-v",
+            "error",
+            *SAFE_INPUT,
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            str(path),
+        ],
         capture_output=True,
         check=True,
         timeout=60,
@@ -80,7 +101,7 @@ def _ffmpeg(*args: str, timeout: int = 900) -> None:
 def remux(src: Path) -> Path:
     dst = src.with_name(src.stem + ".remux.mp4")
     _ffmpeg(
-        "-i", str(src), "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", "-movflags", "+faststart", str(dst)
+        *_input(src), "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", "-movflags", "+faststart", str(dst)
     )
     src.unlink(missing_ok=True)
     return dst
@@ -90,7 +111,7 @@ def transcode(src: Path) -> Path:
     # Only short clips get here; one thread keeps the shared server responsive.
     dst = src.with_name(src.stem + ".h264.mp4")
     _ffmpeg(
-        "-i", str(src), "-map", "0:v:0", "-map", "0:a:0?",
+        *_input(src), "-map", "0:v:0", "-map", "0:a:0?",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
         "-threads", "1", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(dst),
     )  # fmt: skip
@@ -103,7 +124,7 @@ def make_thumbnail(video: Path, duration: float) -> Path | None:
     at = "1" if duration >= 2 else "0"
     try:
         _ffmpeg(
-            "-ss", at, "-i", str(video), "-frames:v", "1",
+            "-ss", at, *_input(video), "-frames:v", "1",
             "-vf", "scale='if(gt(iw,ih),320,-2)':'if(gt(iw,ih),-2,320)'", "-q:v", "4", str(thumb),
             timeout=60,
         )  # fmt: skip
@@ -114,7 +135,7 @@ def make_thumbnail(video: Path, duration: float) -> Path | None:
 
 def to_jpeg(src: Path) -> Path:
     dst = src.with_suffix(".jpg") if src.suffix.lower() != ".jpg" else src.with_name(src.stem + ".conv.jpg")
-    _ffmpeg("-i", str(src), "-frames:v", "1", "-q:v", "2", str(dst), timeout=60)
+    _ffmpeg(*_input(src), "-frames:v", "1", "-q:v", "2", str(dst), timeout=60)
     src.unlink(missing_ok=True)
     return dst
 
@@ -126,7 +147,7 @@ def split_video(src: Path, duration: float, limit: int = MAX_UPLOAD_BYTES) -> li
     segment = max(1, math.floor(duration / parts))
     pattern = src.with_name(src.stem + ".part%02d.mp4")
     _ffmpeg(
-        "-i", str(src), "-map", "0", "-c", "copy", "-f", "segment", "-segment_time", str(segment),
+        *_input(src), "-map", "0", "-c", "copy", "-f", "segment", "-segment_time", str(segment),
         "-reset_timestamps", "1", "-movflags", "+faststart", str(pattern),
     )  # fmt: skip
     src.unlink(missing_ok=True)

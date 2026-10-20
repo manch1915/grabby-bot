@@ -20,6 +20,8 @@ from aiohttp import web
 from grabby.bot import telegram_calls
 from grabby.bot.intake import Intake, extract_urls
 from grabby.fetch.threads import find_post, media_urls
+from grabby.services import resolver as resolver_module
+from grabby.services.netguard import blocked_literal, is_public_host
 from grabby.services.pipeline import JobOptions
 from grabby.services.resolver import LinkResolver
 from grabby.services.storage import WorkDir
@@ -142,7 +144,12 @@ def test_threads_parser_finds_the_post_and_its_media() -> None:
     assert find_post(html, "missing") is None
 
 
-async def test_resolver_reads_location_and_meta_refresh() -> None:
+async def test_resolver_reads_location_and_meta_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def anything_goes(host: str) -> bool:
+        return True
+
+    monkeypatch.setattr(resolver_module, "is_public_host", anything_goes)
+
     async def hop1(request: web.Request) -> web.Response:
         raise web.HTTPFound("https://www.instagram.com/reel/abc/")
 
@@ -182,3 +189,34 @@ def test_workdir_budget(tmp_path: Path) -> None:
     assert not work.has_room()
     work.release("abc")
     assert work.has_room()
+
+
+async def test_resolver_refuses_internal_hosts() -> None:
+    async with aiohttp.ClientSession() as session:
+        resolver = LinkResolver(session)
+        assert await resolver._follow("http://127.0.0.1:6379/", headers={}) == "http://127.0.0.1:6379/"
+
+
+@pytest.mark.parametrize(
+    ("host", "blocked"),
+    [
+        ("127.0.0.1", True),
+        ("10.0.0.5", True),
+        ("172.18.0.1", True),
+        ("169.254.169.254", True),
+        ("[::1]", True),
+        ("localhost", True),
+        ("redis", True),
+        ("bot-api", True),
+        ("metadata.google.internal", True),
+        ("8.8.8.8", False),
+        ("www.tiktok.com", False),
+    ],
+)
+def test_blocked_literal(host: str, blocked: bool) -> None:
+    assert blocked_literal(host) is blocked
+
+
+async def test_is_public_host_rejects_names_resolving_inside() -> None:
+    assert not await is_public_host("localhost")
+    assert not await is_public_host("127.0.0.1")

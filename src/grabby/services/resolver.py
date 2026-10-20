@@ -13,6 +13,7 @@ from urllib.parse import urljoin, urlsplit
 import aiohttp
 
 from grabby.domain.links import Link, normalize
+from grabby.services.netguard import is_public_host
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +79,9 @@ class LinkResolver:
         last_good = start or url
         timeout = aiohttp.ClientTimeout(total=15)
         for _ in range(_MAX_HOPS):
+            if not await is_public_host(urlsplit(current).hostname or ""):
+                log.warning("refusing to follow %s: not a public host", current)
+                return last_good if last_good != current else url
             async with self.session.request(
                 method, current, headers=headers, allow_redirects=False, timeout=timeout
             ) as resp:
