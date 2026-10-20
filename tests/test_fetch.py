@@ -153,7 +153,7 @@ def test_instagram_media_id_from_shortcode() -> None:
     assert instagram_account.media_id("DZelBdysX47") == 3917731554288303675
 
 
-def test_instagram_tries_anonymously_before_using_the_account(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_instagram_uses_the_given_account_directly(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str | None] = []
     bundle = MediaBundle(info=PostInfo(url="u"))
 
@@ -165,8 +165,9 @@ def test_instagram_tries_anonymously_before_using_the_account(monkeypatch: pytes
     req = FetchRequest(
         url="https://www.instagram.com/reel/abc/", platform="instagram", workdir="/w", cookies_file="c.txt"
     )
+    # The pipeline already tried anonymously before handing out an account.
     assert runner.acquire(req) is bundle
-    assert calls == [None]
+    assert calls == ["c.txt"]
 
 
 def test_instagram_checkpoint_is_reported_as_blocked_account(monkeypatch: pytest.MonkeyPatch) -> None:

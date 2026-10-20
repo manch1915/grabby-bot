@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     max_retries: int = 2
     retry_base_delay_s: float = 4
 
+    cookie_min_gap_s: float = 8.0
+    cookie_daily_cap: int = 300
+    cookie_quarantine_h: float = 6
+
     proxy_urls: Annotated[list[str], NoDecode] = Field(default_factory=list)
     proxy_platforms: Annotated[list[Platform], NoDecode] = Field(
         default_factory=lambda: [Platform.INSTAGRAM, Platform.TIKTOK]

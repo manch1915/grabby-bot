@@ -18,7 +18,9 @@ _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
 )
-_BLOCKED = frozenset({"checkpoint_required", "challenge_required", "login_required", "feedback_required"})
+# Only unambiguous signals: feedback_required and login_required also show up for
+# short-lived throttling, and those should not take an account out of rotation.
+_BLOCKED = frozenset({"checkpoint_required", "challenge_required"})
 
 
 def media_id(shortcode: str) -> int:

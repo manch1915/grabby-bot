@@ -17,6 +17,7 @@ from grabby.domain.media import MediaBundle, Quality
 from grabby.domain.platforms import Platform
 from grabby.fetch.protocol import FetchRequest
 from grabby.infra.store import CachedFile, CachedPost, CacheStore, JobStore, StatsStore
+from grabby.services.cookie_pool import CookiePool, Lease
 from grabby.services.fetcher import Fetcher
 from grabby.services.netguard import is_public_host
 from grabby.services.resolver import LinkResolver
@@ -24,6 +25,8 @@ from grabby.services.scheduler import FairScheduler
 from grabby.services.storage import WorkDir
 
 log = logging.getLogger(__name__)
+
+_NEEDS_ACCOUNT = frozenset({ErrorKind.LOGIN_REQUIRED, ErrorKind.PRIVATE, ErrorKind.AGE_RESTRICTED})
 
 
 @dataclass(slots=True)
@@ -91,6 +94,7 @@ class Pipeline:
         workdir: WorkDir,
         resolver: LinkResolver,
         messenger: Messenger,
+        cookies: CookiePool,
     ) -> None:
         self.settings = settings
         self.scheduler = scheduler
@@ -101,12 +105,11 @@ class Pipeline:
         self.workdir = workdir
         self.resolver = resolver
         self.messenger = messenger
+        self.cookies = cookies
         self._runtimes: dict[str, _Runtime] = {}
         self._submit_locks: dict[int, asyncio.Lock] = {}
         self._workers: list[asyncio.Task[None]] = []
         self._background: set[asyncio.Task[None]] = set()
-        self._cookie_turns: dict[Platform, int] = {}
-        self._job_cookies: dict[str, Path] = {}
         self._proxies = itertools.cycle(settings.proxy_urls) if settings.proxy_urls else None
 
     # lifecycle
@@ -281,16 +284,30 @@ class Pipeline:
             await self._complete(job, Outcome(job, cached=cached), status=JobStatus.DONE)
             return
 
+        lease: Lease | None = None
+        swapped_account = False
         while True:
             job.attempts += 1
-            result = await self.fetcher.fetch(job.id, self._request(job))
+            result = await self.fetcher.fetch(job.id, self._request(job, lease))
+            kind = result.error_kind or ErrorKind.UNKNOWN
+            if lease is not None:
+                blocked = result.error if kind is ErrorKind.ACCOUNT_BLOCKED else None
+                if await self.cookies.release(lease, blocked=blocked):
+                    await self._account_alert(lease, result.error)
             if result.ok:
                 await self._complete(job, Outcome(job, bundle=result.bundle), status=JobStatus.DONE)
                 return
-            kind = result.error_kind or ErrorKind.UNKNOWN
             self.workdir.release(job.id)
-            if kind is ErrorKind.ACCOUNT_BLOCKED and await self._retire_cookies(job, result.error):
-                continue  # another account is left, try it
+            # Accounts are a fallback: only links the site refuses anonymously get one,
+            # and a blocked account is swapped for another once per job.
+            retry_with_account = (lease is None and kind in _NEEDS_ACCOUNT) or (
+                kind is ErrorKind.ACCOUNT_BLOCKED and not swapped_account
+            )
+            if kind is ErrorKind.ACCOUNT_BLOCKED:
+                swapped_account = True
+            lease = await self.cookies.acquire(job.platform) if retry_with_account else None
+            if lease is not None:
+                continue
             if kind.retryable and job.attempts <= self.settings.max_retries:
                 delay = self.settings.retry_base_delay_s * 2 ** (job.attempts - 1)
                 log.info("retrying %s in %ss after %s", job.url, delay, kind)
@@ -301,20 +318,30 @@ class Pipeline:
             await self._complete(job, Outcome(job), status=status)
             return
 
-    def _request(self, job: Job) -> FetchRequest:
+    async def _account_alert(self, lease: Lease, reason: str) -> None:
+        left = len(await self.cookies.states(lease.platform))
+        log.warning("account %s blocked by %s: %s", lease.source.name, lease.platform.value, reason)
+        hours = self.cookies.quarantine // 3600
+        try:
+            await self.messenger.notify_admins(
+                f"{lease.platform.label} заблокировал аккаунт {lease.source.name}: {reason}. "
+                f"Он отдыхает {hours} ч, всего аккаунтов в пуле: {left}. "
+                "Если это checkpoint, его нужно пройти в приложении и выгрузить cookies заново."
+            )
+        except Exception:
+            log.exception("could not notify admins")
+
+    def _request(self, job: Job, lease: Lease | None = None) -> FetchRequest:
         proxy = None
         if self._proxies is not None and job.platform in self.settings.proxy_platforms:
             proxy = next(self._proxies)
         workdir = self.workdir.job_dir(job.id)
-        cookies = self._next_cookies(job.platform)
-        self._job_cookies.pop(job.id, None)
-        if cookies is not None:
-            self._job_cookies[job.id] = cookies
+        cookies: Path | None = None
+        if lease is not None:
             # yt-dlp writes the jar back on exit; parallel jobs must not share one file.
-            private = workdir / "cookies.txt"
-            shutil.copyfile(cookies, private)
-            private.chmod(0o600)
-            cookies = private
+            cookies = workdir / "cookies.txt"
+            shutil.copyfile(lease.source, cookies)
+            cookies.chmod(0o600)
         return FetchRequest(
             url=job.url,
             platform=job.platform.value,
@@ -327,30 +354,6 @@ class Pipeline:
             proxy=proxy,
             split_parts=job.split_parts,
         )
-
-    async def _retire_cookies(self, job: Job, reason: str) -> bool:
-        """Take a blocked account out of rotation. True if the site still has others."""
-        source = self._job_cookies.pop(job.id, None)
-        if source is not None and source.exists():
-            source.rename(source.with_suffix(".blocked"))
-            left = len(self.settings.cookie_files(job.platform))
-            log.warning("cookies %s blocked by %s: %s", source.name, job.platform.value, reason)
-            try:
-                await self.messenger.notify_admins(
-                    f"{job.platform.label} заблокировал аккаунт из {source.name}: {reason}. "
-                    f"Файл отключён, осталось аккаунтов: {left}."
-                )
-            except Exception:
-                log.exception("could not notify admins")
-        return bool(self.settings.cookie_files(job.platform))
-
-    def _next_cookies(self, platform: Platform) -> Path | None:
-        files = self.settings.cookie_files(platform)
-        if not files:
-            return None
-        turn = self._cookie_turns.get(platform, 0)
-        self._cookie_turns[platform] = turn + 1
-        return files[turn % len(files)]
 
     async def _complete(self, job: Job, outcome: Outcome, *, status: JobStatus) -> None:
         runtime = self._runtimes.get(job.batch_id)

@@ -1,4 +1,4 @@
-from dataclasses import replace
+import re
 from pathlib import Path
 
 from grabby.domain.errors import DownloadError, ErrorKind
@@ -14,6 +14,7 @@ from grabby.fetch import (
 )
 from grabby.fetch.protocol import FetchRequest
 
+_HTTP_400 = re.compile(r"HTTP Error 400\b|'400 Bad Request'")
 _GALLERY_FALLBACK = frozenset({ErrorKind.NO_MEDIA, ErrorKind.UNSUPPORTED, ErrorKind.UNKNOWN})
 
 
@@ -26,22 +27,17 @@ def acquire(req: FetchRequest) -> MediaBundle:
         return _tiktok_photos(req)
 
     if platform is Platform.INSTAGRAM and req.cookies_file:
-        return _instagram_with_fallback(req)
+        return _instagram_with_session(req)
     return _generic(req, platform)
 
 
-def _instagram_with_fallback(req: FetchRequest) -> MediaBundle:
-    """Anonymous first: about half of public Reels need no account, and every request made
-    with a session brings that account closer to an Instagram checkpoint."""
-    try:
-        return _generic(replace(req, cookies_file=None), Platform.INSTAGRAM)
-    except DownloadError as error:
-        if error.kind not in (ErrorKind.LOGIN_REQUIRED, ErrorKind.NO_MEDIA, ErrorKind.UNKNOWN):
-            raise
+def _instagram_with_session(req: FetchRequest) -> MediaBundle:
+    """A session gets HTTP 400 both for posts Instagram hides and when the account itself
+    is on a checkpoint; only the latter must not be reported as a missing post."""
     try:
         return _generic(req, Platform.INSTAGRAM)
     except DownloadError as error:
-        if req.cookies_file and "400" in error.detail:
+        if req.cookies_file and _HTTP_400.search(error.detail):
             reason = instagram_account.blocked_reason(req.cookies_file, req.url, req.proxy)
             if reason:
                 raise DownloadError(ErrorKind.ACCOUNT_BLOCKED, reason) from error

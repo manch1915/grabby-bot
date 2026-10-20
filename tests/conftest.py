@@ -13,6 +13,7 @@ from grabby.domain.links import Link
 from grabby.domain.media import MediaBundle, MediaItem, MediaKind, PostInfo
 from grabby.fetch.protocol import FetchRequest, FetchResult
 from grabby.infra.store import CachedFile, CacheStore, JobStore, StatsStore
+from grabby.services.cookie_pool import CookiePool
 from grabby.services.pipeline import Outcome, Pipeline
 from grabby.services.scheduler import FairScheduler
 from grabby.services.storage import WorkDir
@@ -25,6 +26,10 @@ class FakeFetcher:
         self.delays: dict[str, float] = {}
         self.errors: dict[str, ErrorKind] = {}
         self.calls: list[str] = []
+        # Links that only work with an account, and accounts (by cookie file text) the site blocked.
+        self.needs_login: set[str] = set()
+        self.blocked_accounts: set[str] = set()
+        self.accounts_used: list[str | None] = []
         self.block = asyncio.Event()
         self.block.set()
         self._cancelled: set[str] = set()
@@ -39,6 +44,12 @@ class FakeFetcher:
             return FetchResult(error_kind=ErrorKind.CANCELLED)
         if (kind := self.errors.get(request.url)) is not None:
             return FetchResult(error_kind=kind, error="boom")
+        account = Path(request.cookies_file).read_text().strip() if request.cookies_file else None  # noqa: ASYNC240
+        self.accounts_used.append(account)
+        if account in self.blocked_accounts:
+            return FetchResult(error_kind=ErrorKind.ACCOUNT_BLOCKED, error="checkpoint_required")
+        if request.url in self.needs_login and account is None:
+            return FetchResult(error_kind=ErrorKind.LOGIN_REQUIRED, error="empty media response")
         path = Path(request.workdir) / "clip.mp4"
         path.write_bytes(b"x" * 10)
         item = MediaItem(str(path), MediaKind.VIDEO, size=10, width=720, height=1280, duration=3)
@@ -110,6 +121,7 @@ def make_env(settings: Settings, redis: FakeRedis, root: Path) -> Env:
         workdir=workdir,
         resolver=FakeResolver(),  # type: ignore[arg-type]
         messenger=messenger,
+        cookies=CookiePool(redis, settings.cookie_files, min_gap_s=0.01),
     )
     return Env(pipeline, fetcher, messenger, redis, settings, workdir)
 

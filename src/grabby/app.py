@@ -18,6 +18,7 @@ from grabby.bot.middlewares import AccessMiddleware
 from grabby.bot.texts import size_label, t
 from grabby.config import Settings
 from grabby.infra.store import CacheStore, JobStore, KeyValue, StatsStore, UserStore
+from grabby.services.cookie_pool import CookiePool
 from grabby.services.fetcher import Fetcher
 from grabby.services.netguard import PublicOnlyResolver
 from grabby.services.pipeline import JobOptions, Pipeline
@@ -106,6 +107,13 @@ async def run(settings: Settings) -> None:
         admin_ids=settings.admin_ids,
     )
 
+    cookies = CookiePool(
+        redis,
+        settings.cookie_files,
+        min_gap_s=settings.cookie_min_gap_s,
+        daily_cap=settings.cookie_daily_cap,
+        quarantine_s=int(settings.cookie_quarantine_h * 3600),
+    )
     http = aiohttp.ClientSession(connector=aiohttp.TCPConnector(resolver=PublicOnlyResolver()))
     pipeline = Pipeline(
         settings=settings,
@@ -117,6 +125,7 @@ async def run(settings: Settings) -> None:
         workdir=workdir,
         resolver=LinkResolver(http),
         messenger=messenger,
+        cookies=cookies,
     )
 
     async def submit(

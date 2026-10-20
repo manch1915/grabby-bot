@@ -9,6 +9,7 @@ from aiogram.types import Message
 from grabby.bot.texts import t
 from grabby.config import Settings
 from grabby.domain.jobs import UserSettings
+from grabby.domain.platforms import Platform
 from grabby.infra.store import KeyValue, StatsStore, UserStore
 from grabby.services.fetcher import Fetcher
 from grabby.services.pipeline import Pipeline
@@ -71,6 +72,7 @@ async def _stats(message: Message, command: CommandObject, prefs: UserSettings, 
             f"Work dir: {_gb(workdir.usage())} of {_gb(workdir.limit)}, disk free {_gb(workdir.free())}",
             f"Access: {await users.access_mode(ctx.settings.access_mode)}",
             f"Extractors: {versions}",
+            *await _accounts(ctx),
             "By site:",
             *(rows or ["  none yet"]),
             f"Errors: {errors or 'none'}",
@@ -128,6 +130,15 @@ async def _update(message: Message, command: CommandObject, prefs: UserSettings,
 async def _rollback(message: Message, command: CommandObject, prefs: UserSettings, ctx: AdminContext) -> None:
     done = ctx.extractors.rollback()
     await message.answer(t(prefs.lang, "rollback_done" if done else "rollback_none"))
+
+
+async def _accounts(ctx: AdminContext) -> list[str]:
+    lines = []
+    for platform in Platform:
+        for state in await ctx.pipeline.cookies.states(platform):
+            rest = f", resting {state.quarantined_for_s // 60} min" if state.quarantined_for_s else ""
+            lines.append(f"  {state.name}: {state.used_today} today{rest}")
+    return ["Accounts:", *lines] if lines else ["Accounts: none"]
 
 
 async def save_versions(kv: KeyValue, report: UpdateReport) -> None:

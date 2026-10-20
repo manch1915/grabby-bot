@@ -1,11 +1,9 @@
 import asyncio
-from pathlib import Path
 
 from conftest import Env
 from grabby.domain.errors import ErrorKind
 from grabby.domain.jobs import JobStatus
 from grabby.domain.platforms import Platform
-from grabby.fetch.protocol import FetchRequest, FetchResult
 from grabby.services.pipeline import JobOptions
 
 TT = "https://www.tiktok.com/@a/video/{}"
@@ -183,47 +181,45 @@ async def test_repeats_across_messages_are_counted_once(env: Env) -> None:
     assert (batch.total, batch.duplicates) == (4, 1)
 
 
-async def test_each_job_gets_its_own_cookie_copy(env: Env) -> None:
-    cookies = env.settings.cookies_dir
-    cookies.mkdir(parents=True)
-    (cookies / "tiktok.txt").write_text("# Netscape HTTP Cookie File\n")
-    seen: list[str | None] = []
-    original = env.fetcher.fetch
+def add_accounts(env: Env, *names: str) -> None:
+    folder = env.settings.cookies_dir
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (folder / f"tiktok-{name}.txt").write_text(name)
 
-    async def spy(key: str, request: FetchRequest, *, extractor_path: Path | None = None) -> FetchResult:
-        seen.append(request.cookies_file)
-        assert request.cookies_file and Path(request.cookies_file).read_text().startswith("#")  # noqa: ASYNC240
-        return await original(key, request, extractor_path=extractor_path)
 
-    env.fetcher.fetch = spy  # type: ignore[method-assign]
+async def test_accounts_are_only_used_when_the_site_asks_for_a_login(env: Env) -> None:
+    add_accounts(env, "a")
+    open_link, closed_link = TT.format(1), TT.format(2)
+    env.fetcher.needs_login = {closed_link}
     await env.pipeline.start()
-    await submit(env, TT.format(1), TT.format(2))
+    await submit(env, open_link, closed_link)
     await wait_done(env)
-    assert len(seen) == 2 and len(set(seen)) == 2
-    assert all(path and Path(path).parent.name != "cookies" for path in seen)
+    assert [d[2] for d in env.messenger.delivered] == [True, True]
+    assert env.fetcher.accounts_used == [None, None, "a"]
 
 
-async def test_blocked_account_is_retired_and_the_next_one_used(env: Env) -> None:
-    cookies = env.settings.cookies_dir
-    cookies.mkdir(parents=True)
-    for name in ("tiktok.txt", "tiktok-2.txt"):
-        (cookies / name).write_text("# Netscape HTTP Cookie File\n")
+async def test_blocked_account_rests_and_the_next_one_takes_over(env: Env) -> None:
+    add_accounts(env, "a", "b")
     url = TT.format(5)
-    env.fetcher.errors = {url: ErrorKind.ACCOUNT_BLOCKED}
-    original = env.fetcher.fetch
-
-    async def heal_after_first(
-        key: str, request: FetchRequest, *, extractor_path: Path | None = None
-    ) -> FetchResult:
-        result = await original(key, request, extractor_path=extractor_path)
-        env.fetcher.errors.clear()
-        return result
-
-    env.fetcher.fetch = heal_after_first  # type: ignore[method-assign]
+    env.fetcher.needs_login = {url}
+    env.fetcher.blocked_accounts = {"a"}
     await env.pipeline.start()
     await submit(env, url)
     await wait_done(env)
     assert env.messenger.delivered[0][2]
-    assert len(list(cookies.glob("*.blocked"))) == 1
-    assert len(env.settings.cookie_files(Platform.TIKTOK)) == 1
-    assert "осталось аккаунтов: 1" in env.messenger.alerts[0]
+    assert env.fetcher.accounts_used == [None, "a", "b"]
+    states = {s.name: s for s in await env.pipeline.cookies.states(Platform.TIKTOK)}
+    assert states["tiktok-a.txt"].quarantined_for_s > 0
+    assert states["tiktok-b.txt"].quarantined_for_s == 0
+    assert "tiktok-a.txt" in env.messenger.alerts[0]
+
+
+async def test_without_accounts_a_login_wall_is_reported(env: Env) -> None:
+    url = TT.format(6)
+    env.fetcher.needs_login = {url}
+    await env.pipeline.start()
+    await submit(env, url)
+    await wait_done(env)
+    assert env.fetcher.accounts_used == [None]
+    assert not env.messenger.delivered[0][2]
